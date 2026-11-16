@@ -219,11 +219,16 @@ func (x *tx) ensuredBox(ev Ensured) {
 	}
 }
 
-// replaceFailed tries the replacement again after a backoff, and fails the run once the retries
-// are spent, so a task whose box cannot come back neither holds its slot nor waits for ever.
+// replaceFailed tries the replacement again after a backoff. Once the retries are spent, an
+// unattended run fails, so it neither holds its slot nor waits for ever, while an interactive
+// task's box stays asleep for the person watching it to retry with a message.
 func (x *tx) replaceFailed(a Active, err string) {
 	tries := a.Box.Tries
 	if tries >= len(x.p.ReplaceBackoff) {
+		if !x.t.Kind.Unattended() {
+			x.boxStayedAsleep(a, fmt.Sprintf("%s (after %d tries; send a message to try again)", cut(err, maxErrText), tries+1))
+			return
+		}
 		x.t.Life = a
 		x.close(OutcomeFailed, fmt.Sprintf("Could not bring the box back after %d tries: %s", tries+1, cut(err, maxErrText)))
 		return

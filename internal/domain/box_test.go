@@ -1,7 +1,6 @@
 package domain_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -191,23 +190,37 @@ func spendRetries(r *run) {
 	}
 }
 
-func TestAFailedReplacementRetriesThenFailsTheRun(t *testing.T) {
-	for _, kind := range []domain.Kind{domain.KindScheduled, domain.KindInteractive} {
-		t.Run(fmt.Sprint(kind), func(t *testing.T) {
-			r := working(t, kind)
-			r.apply(domain.BoxEvent{Gen: 1, Kind: domain.BoxDied})
-			failReplacement(r, r.policy.ReplaceDelay)
-			spendRetries(r)
-			closing, ok := r.task.Life.(domain.Closing)
-			if !ok || closing.Want != domain.OutcomeFailed || !strings.Contains(closing.Reason, "no space left") {
-				t.Fatalf("life = %+v, want a failed close once the retries are spent", r.task.Life)
-			}
-			r.apply(domain.SummaryRead{Ask: latest[domain.ReadSummary](r).Ask})
-			r.want(domain.StatusFailed)
-			if lastEntry(r).Kind != domain.EntryFailed || !strings.Contains(lastEntry(r).Text, "no space left") {
-				t.Errorf("last entry %+v", lastEntry(r))
-			}
-		})
+func TestAFailedReplacementRetriesThenFailsAnUnattendedRun(t *testing.T) {
+	r := working(t, domain.KindScheduled)
+	r.apply(domain.BoxEvent{Gen: 1, Kind: domain.BoxDied})
+	failReplacement(r, r.policy.ReplaceDelay)
+	spendRetries(r)
+	closing, ok := r.task.Life.(domain.Closing)
+	if !ok || closing.Want != domain.OutcomeFailed || !strings.Contains(closing.Reason, "no space left") {
+		t.Fatalf("life = %+v, want a failed close once the retries are spent", r.task.Life)
+	}
+	r.apply(domain.SummaryRead{Ask: latest[domain.ReadSummary](r).Ask})
+	r.want(domain.StatusFailed)
+	if lastEntry(r).Kind != domain.EntryFailed || !strings.Contains(lastEntry(r).Text, "no space left") {
+		t.Errorf("last entry %+v", lastEntry(r))
+	}
+}
+
+func TestAFailedReplacementLeavesAnInteractiveBoxAsleepForAMessage(t *testing.T) {
+	r := working(t, domain.KindInteractive)
+	r.apply(domain.BoxEvent{Gen: 1, Kind: domain.BoxDied})
+	failReplacement(r, r.policy.ReplaceDelay)
+	spendRetries(r)
+	r.want(domain.StatusWaiting)
+	if r.task.BoxWant() != domain.BoxAsleep || !strings.Contains(lastEntry(r).Text, "send a message") {
+		t.Fatalf("box want %v, last %+v: want the box asleep and the person told", r.task.BoxWant(), lastEntry(r))
+	}
+	if _, ok := r.task.NextDeadline(); ok {
+		t.Errorf("a deadline is armed; a person decides what happens next")
+	}
+	fx := r.apply(domain.UserMessage{By: owner, Text: "try again"}).Effects
+	if kinds(fx) != "EnsureRunning" {
+		t.Errorf("effects = %q, want the message to wake the box", kinds(fx))
 	}
 }
 
