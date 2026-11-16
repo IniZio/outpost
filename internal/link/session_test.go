@@ -22,6 +22,7 @@ var (
 	tBad   = NewOp[badReq, struct{}](tcat, "t.bad", ServedByAgent)
 	tPipe  = NewStreamOp[struct{ N int }, struct{ N int }](tcat, "t.pipe", ServedByAgent)
 	tWatch = NewResumableOp[struct{ ID string }, struct{ Opens int }](tcat, "t.watch", ServedByAgent)
+	tFail  = NewOp[struct{ Kind string }, struct{}](tcat, "t.fail", ServedByAgent)
 	tRep   = NewOp[struct{ MemFree int }, struct{}](tcat, "t.report", ServedByServer)
 )
 
@@ -82,6 +83,17 @@ func newAgentSide(t *testing.T, caps CapSet) *testSide {
 		<-ctx.Done()
 		close(ts.hung)
 		return struct{}{}, ctx.Err()
+	})
+	Handle(r, tFail, func(ctx context.Context, _ Meta, q struct{ Kind string }) (struct{}, error) {
+		switch q.Kind {
+		case "refused":
+			return struct{}{}, Errorf(CodeRefused, "not yours")
+		case "wrapped":
+			return struct{}{}, fmt.Errorf("while doing it: %w", Errorf(CodeBusy, "slots full"))
+		case "cancelled":
+			return struct{}{}, context.Canceled
+		}
+		return struct{}{}, errors.New("disk on fire")
 	})
 	Handle(r, tExec, func(context.Context, Meta, struct{}) (struct{}, error) { return struct{}{}, nil })
 	Handle(r, tBad, func(context.Context, Meta, badReq) (struct{}, error) { t.Error("handler ran"); return struct{}{}, nil })
@@ -405,5 +417,23 @@ func TestInflightLimitAnswersBusy(t *testing.T) {
 	defer func() { _ = s.Close() }()
 	if _, err := Call(context.Background(), fix(srv), tEcho, struct{ S string }{}); !errors.Is(err, &Error{Code: CodeBusy}) {
 		t.Fatalf("over the limit: %v", err)
+	}
+}
+
+func TestHandlerErrorsKeepOnlyTheCodeTheyChose(t *testing.T) {
+	srv, _ := pair(t, newAgentSide(t, 0).reg, serverReg(), DefaultTiming(), 0)
+	cases := map[string]Code{
+		"refused": CodeRefused, "wrapped": CodeBusy, "cancelled": CodeCancelled, "plain": CodeInternal,
+	}
+	for kind, want := range cases {
+		_, err := Call(context.Background(), fix(srv), tFail, struct{ Kind string }{kind})
+		var le *Error
+		if !errors.As(err, &le) || le.Code != want || !errors.Is(err, &Error{Code: want}) {
+			t.Errorf("%s: got %v, want code %s", kind, err, want)
+		}
+	}
+	_, err := Call(context.Background(), fix(srv), tFail, struct{ Kind string }{"refused"})
+	if err.Error() != "refused: not yours" {
+		t.Fatalf("error text: %q", err)
 	}
 }

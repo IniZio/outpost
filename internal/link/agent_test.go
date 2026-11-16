@@ -235,3 +235,82 @@ func TestAgentFollowsAWelcomeIntoALink(t *testing.T) {
 		return len(th.store.unlinkedGen) == 1 && th.store.unlinkedGen[0] == 1
 	})
 }
+
+// scripted is a server that answers the agent's frames with fixed text, one reply per frame read.
+func scripted(t *testing.T, replies ...string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.CloseNow() }()
+		for _, reply := range replies {
+			if _, _, err := c.Read(r.Context()); err != nil {
+				return
+			}
+			_ = c.Write(r.Context(), websocket.MessageText, []byte(reply))
+		}
+		_, _, _ = c.Read(r.Context())
+	}))
+	t.Cleanup(srv.Close)
+	return "ws" + strings.TrimPrefix(srv.URL, "http")
+}
+
+func TestAgentHandshakeReadsWhatOddServersSay(t *testing.T) {
+	cases := []struct {
+		name    string
+		replies []string
+		check   func(error) bool
+	}{
+		{"a welcome before any proof", []string{`{"t":"welcome"}`}, func(err error) bool { return errors.Is(err, errProtocol) }},
+		{"a second challenge instead of a welcome", []string{`{"t":"challenge"}`, `{"t":"challenge"}`}, func(err error) bool { return errors.Is(err, errProtocol) }},
+		{"a tag from a newer server", []string{`{"t":"hello_ack"}`}, func(err error) bool { var u *UpdateRequiredError; return errors.As(err, &u) }},
+		{"update required with both versions", []string{`{"t":"update_required","server_proto":3,"min_proto":2}`}, func(err error) bool {
+			var u *UpdateRequiredError
+			return errors.As(err, &u) && u.ServerProto == 3 && u.MinProto == 2 && strings.Contains(err.Error(), "mismatch")
+		}},
+		{"refused after the proof", []string{`{"t":"challenge","nonce":"AAAA"}`, `{"t":"refused","reason":"unauthorized"}`}, func(err error) bool {
+			var r *RefusedError
+			return errors.As(err, &r) && strings.Contains(err.Error(), "unauthorized")
+		}},
+		{"relink after the proof", []string{`{"t":"challenge","nonce":"AAAA"}`, `{"t":"relink"}`}, func(err error) bool { return errors.Is(err, errRelinkLater) }},
+		{"the connection ends", nil, func(err error) bool { return err != nil }},
+	}
+	th := newTestHub(t, nil)
+	cfg := AgentConfig{ID: th.id, Key: th.key, Proto: ProtoVersion, Timing: shortTiming()}
+	for _, c := range cases {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		conn, _, err := websocket.Dial(ctx, scripted(t, c.replies...), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := agentHandshake(ctx, conn, &cfg, "host"); !c.check(err) {
+			t.Errorf("%s: got %v", c.name, err)
+		}
+		_ = conn.CloseNow()
+		cancel()
+	}
+}
+
+func TestHandOffFallsBackToRetireWhenTheAgentDoesNotAckRelink(t *testing.T) {
+	th := newTestHub(t, nil)
+	srv, _ := pair(t, newAgentSide(t, 0).reg, serverReg(), DefaultTiming(), 0)
+	if !th.hub.handOff(context.Background(), srv) {
+		t.Fatal("a plain retire counts as handed off")
+	}
+	select {
+	case <-srv.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the session must be closed so the agent sees it and reconnects")
+	}
+}
+
+func TestErrorTextsNameTheirCause(t *testing.T) {
+	if got := (&UpdateRequiredError{ServerProto: 2, MinProto: 2}).Error(); !strings.Contains(got, "server speaks 2") {
+		t.Fatalf("got %q", got)
+	}
+	if got := (&RefusedError{Reason: "unauthorized"}).Error(); !strings.Contains(got, "unauthorized") {
+		t.Fatalf("got %q", got)
+	}
+}

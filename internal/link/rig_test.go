@@ -367,3 +367,81 @@ func TestToolMachineGetsExecOnlyWhenItsOwnerOptedIn(t *testing.T) {
 		}
 	}
 }
+
+func TestASecondLinkForTheSameMachineReplacesTheFirst(t *testing.T) {
+	rig, _ := newRig(t, func(o *linktest.Options) {
+		o.Backoff = linktest.FastBackoff()
+		o.Backoff.Base, o.Backoff.Max, o.Backoff.StableAfter = 2*time.Second, 2*time.Second, time.Minute
+	})
+	reg := link.NewRegistry(cat, link.ServedByAgent, 0)
+	link.Handle(reg, echo, func(context.Context, link.Meta, text) (text, error) { return text{"second"}, nil })
+	link.Handle(reg, gate, func(context.Context, link.Meta, text) (text, error) { return text{}, nil })
+	link.HandleResumable(reg, watch, func(context.Context, link.Meta, text) (struct{ Opens int }, link.Bytes, error) {
+		return struct{ Opens int }{}, nil, nil
+	})
+	agent, err := link.NewAgent(link.AgentConfig{URL: rig.URL, ID: rig.Machine, Key: rig.Key, Reg: reg, Timing: linktest.FastTiming(), Backoff: linktest.FastBackoff()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { _ = agent.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	if !linktest.Eventually(func() bool {
+		got, err := link.Call(ctx, rig.Hub.Link(rig.Machine), echo, text{})
+		return err == nil && got.S == "second"
+	}) {
+		t.Fatal("calls must reach the machine's newest link")
+	}
+	if info, _ := rig.Hub.Link(rig.Machine).Info(); info.Gen < 2 {
+		t.Fatalf("the second link has the next generation: %+v", info)
+	}
+	if !rig.Store.Online(rig.Machine) {
+		t.Fatal("replacing a link must not mark the machine offline")
+	}
+}
+
+func TestRelinkWaitsForTheNewHubWhenTheOldOneDrainsFirst(t *testing.T) {
+	rig, _ := newRig(t, nil)
+	old := rig.Hub
+	drained := make(chan error, 1)
+	go func() { drained <- old.Drain(deadline(t, 5*time.Second)) }()
+	time.Sleep(150 * time.Millisecond)
+	next := rig.NextHub()
+	rig.WaitLinked(next)
+	if err := <-drained; err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if got, err := link.Call(deadline(t, 5*time.Second), next.Link(rig.Machine), echo, text{"ok"}); err != nil || got.S != "ok" {
+		t.Fatalf("%v %v", got, err)
+	}
+}
+
+func TestAFiniteOpStillRunningAtTheDrainBudgetIsCutAndNotReplayed(t *testing.T) {
+	rig, w := newRig(t, nil)
+	old := rig.Hub
+	ctx := deadline(t, 10*time.Second)
+	called := make(chan error, 1)
+	go func() {
+		_, err := link.Call(ctx, old.Link(rig.Machine), gate, text{"stuck"})
+		called <- err
+	}()
+	<-w.started
+
+	next := rig.NextHub()
+	budget, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	if err := old.Drain(budget); err == nil {
+		t.Fatal("drain must say a link was cut when a finite op outlives the budget")
+	}
+	if err := <-called; !errors.Is(err, link.ErrLinkLost) {
+		t.Fatalf("the cut op's caller learns the link was lost: %v", err)
+	}
+	rig.WaitLinked(next)
+	select {
+	case id := <-w.started:
+		t.Fatalf("a cut op must never be replayed, it started again as %q", id)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
