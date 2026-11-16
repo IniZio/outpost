@@ -86,7 +86,6 @@ linters:
             - "**/internal/sandbox/**"
             - "**/internal/agent/**"
             - "**/internal/terminal/**"
-            - "**/internal/store/**"
             - "**/internal/secrets/**"
             - "**/internal/auth/**"
             - "**/internal/github/**"
@@ -96,6 +95,14 @@ linters:
           allow:
             - github.com/IniZio/outpost/internal/domain
             - github.com/IniZio/outpost/internal/ports
+        store:
+          files: ["**/internal/store/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+            - github.com/IniZio/outpost/internal/store
         egress:
           files: ["**/internal/egress/**"]
           list-mode: lax
