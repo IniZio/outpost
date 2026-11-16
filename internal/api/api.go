@@ -96,6 +96,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/repos/{owner}/{name}", s.act(s.setRepo))
 	m.HandleFunc("PUT /api/secrets/{name}", s.act(s.setSecret))
 	s.scheduleRoutes()
+	s.webRoutes()
 }
 
 type handler func(w http.ResponseWriter, r *http.Request, p auth.Principal) error
