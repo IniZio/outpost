@@ -6,6 +6,11 @@ if [ -d "$seed/workspace" ] && [ ! -e /workspace/.outpost/seeded ]; then
   mkdir -p /workspace/.outpost
   touch /workspace/.outpost/seeded
 fi
+if [ -d "$seed/home" ] && [ ! -e /root/.outpost/home-seeded ]; then
+  cp -a "$seed/home/." /root/
+  mkdir -p /root/.outpost
+  touch /root/.outpost/home-seeded
+fi
 if [ -f "$seed/images.tar" ] && [ ! -e /var/lib/docker/.outpost-loaded ] && command -v docker >/dev/null 2>&1; then
   i=0
   while ! docker info >/dev/null 2>&1; do

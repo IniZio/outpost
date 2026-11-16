@@ -270,6 +270,7 @@ func sleepAndWake(t *testing.T, w *world, rp portstest.BoxesRig, signals <-chan 
 // saveAndReuse saves task 1's box as a template and starts task 2 from it: the workspace comes
 // from the template, so nothing is cloned.
 func saveAndReuse(t *testing.T, w *world, rp portstest.BoxesRig, tg ports.Target) {
+	run(t, "exec", w.name(tg), "sh", "-c", "mkdir -p /root/.toolchain && echo v1 >/root/.toolchain/probe")
 	clock := domain.SystemClock{}
 	start := clock.Now()
 	tpl, err := rp.Boxes.SaveTemplate(ctx(t), tg)
@@ -287,13 +288,25 @@ func saveAndReuse(t *testing.T, w *world, rp portstest.BoxesRig, tg ports.Target
 	if got, err := rp.Boxes.Converge(ctx(t), p, nil); err != nil || !got.Revived {
 		t.Fatalf("start from the template: %+v %v", got, err)
 	}
-	if ok, _ := rp.Boxes.Exists(ctx(t), two, "/workspace/main/README"); !ok || w.clones.Load() != 1 {
-		t.Fatalf("the template's workspace is restored without a clone: %v, %d clones", ok, w.clones.Load())
+	if w.clones.Load() != 1 {
+		t.Fatalf("a box from the template clones nothing: %d clones", w.clones.Load())
 	}
-	if ok, _ := rp.Boxes.Exists(ctx(t), two, "/var/lib/outpost-seed/workspace"); !ok {
-		t.Fatal("the template carries its seed")
-	}
+	mustExist(t, rp, two, map[string]string{
+		"/workspace/main/README":            "the template's workspace is restored",
+		"/root/.toolchain/probe":            "the template carries what the setup box installed under /root",
+		"/root/.config/agent/settings.json": "a box from the template still gets its own home files",
+		"/var/lib/outpost-seed/workspace":   "the template carries its seed",
+	})
 	if ok, _ := rp.Boxes.Exists(ctx(t), tg, "/var/lib/outpost-seed"); ok {
 		t.Fatal("the saved box's seed copy is cleaned up")
+	}
+}
+
+func mustExist(t *testing.T, rp portstest.BoxesRig, tg ports.Target, want map[string]string) {
+	t.Helper()
+	for path, why := range want {
+		if ok, err := rp.Boxes.Exists(ctx(t), tg, path); !ok {
+			t.Fatalf("%s: %s missing (%v)", why, path, err)
+		}
 	}
 }
