@@ -11,7 +11,9 @@ func (x *tx) onRecovered(ev Recovered) {
 		x.recoverActive(l, ev.Agent)
 	case Closing:
 		x.recoverClosing(l)
-	case Queued, Ended:
+	case Ended:
+		x.recoverEnded(l)
+	case Queued:
 		x.drop(DropNoop)
 	}
 }
@@ -85,7 +87,24 @@ func (x *tx) askEffect(k AskKind, id AskID) Effect {
 func (x *tx) recoverClosing(c Closing) {
 	if c.Step == CloseTemplate {
 		x.emit(SaveTemplate{Ask: c.Ask})
+	} else {
+		x.emit(ReadSummary{Ask: c.Ask})
+	}
+	x.reissueEnsure(c.Ensure)
+}
+
+// recoverEnded asks again for the wake a run ended during. Its late answer stops the box again, so
+// a box the wake started just before the crash does not stay up.
+func (x *tx) recoverEnded(e Ended) {
+	if e.Ensure == 0 {
+		x.drop(DropNoop)
 		return
 	}
-	x.emit(ReadSummary{Ask: c.Ask})
+	x.reissueEnsure(e.Ensure)
+}
+
+func (x *tx) reissueEnsure(ask AskID) {
+	if ask != 0 {
+		x.emit(x.askEffect(AskEnsure, ask))
+	}
 }

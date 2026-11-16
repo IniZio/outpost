@@ -176,3 +176,34 @@ func TestARestartReissuesTheFinishWindowsQuestion(t *testing.T) {
 		t.Errorf("effects = %q", kinds(res.Effects))
 	}
 }
+
+func TestARestartReissuesTheWakeAStoppedRunWasWaitingOn(t *testing.T) {
+	r := stopped(t)
+	r.apply(domain.UserMessage{By: owner, Text: "carry on"})
+	wake := latest[domain.EnsureRunning](r)
+	r.apply(domain.UserStop{By: owner})
+	r.want(domain.StatusStopped)
+
+	res := restarted(t, r, agentGone)
+	if again := latest[domain.EnsureRunning](r); kinds(res.Effects) != "EnsureRunning" || again != wake {
+		t.Fatalf("effects %q, ensure %+v: want the wake %+v asked again", kinds(res.Effects), again, wake)
+	}
+	requireBoxStopped(t, r.apply(domain.Ensured{Ask: wake.Ask, Revived: true}))
+	r.dropped(domain.Ensured{Ask: wake.Ask}, domain.DropStaleLife)
+}
+
+func TestARestartReissuesTheWakeTheFinishWindowOvertook(t *testing.T) {
+	r := waiting(t)
+	r.advanceTo(r.policy.IdleSleep)
+	r.apply(domain.UserMessage{By: owner, Text: "add tests too"})
+	wake := latest[domain.EnsureRunning](r)
+	r.apply(domain.UserStop{By: owner})
+	closeAsk := latest[domain.ReadSummary](r).Ask
+
+	res := restarted(t, r, agentGone)
+	if kinds(res.Effects) != "ReadSummary,EnsureRunning" || latest[domain.EnsureRunning](r) != wake {
+		t.Fatalf("effects %q: want the summary read and the wake asked again", kinds(res.Effects))
+	}
+	r.apply(domain.Ensured{Ask: wake.Ask, Revived: true})
+	requireBoxStopped(t, r.apply(domain.SummaryRead{Ask: closeAsk}))
+}
