@@ -27,9 +27,11 @@ type Queued struct{}
 // When Resume is set the task is waking an ended one. The Ended value is kept so a failed wake
 // puts the task back exactly as it was. Messages were typed by the owner to wake the task and are
 // delivered once the agent is up. Early holds agent reports and exits that arrived before the
-// answer and are replayed when it comes.
+// answer and are replayed when it comes. Until is when the start is given up on, zero when the
+// policy sets no start budget.
 type Starting struct {
 	Since    time.Time
+	Until    time.Time
 	Phase    string
 	Ask      AskID
 	Resume   *Ended

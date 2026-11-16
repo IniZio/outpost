@@ -159,7 +159,9 @@ func (t Task) NextDeadline() (time.Time, bool) {
 			return time.Time{}, false
 		}
 		return l.ReleaseAt, true
-	case Queued, Starting:
+	case Starting:
+		return l.Until, !l.Until.IsZero()
+	case Queued:
 		return time.Time{}, false
 	}
 	return time.Time{}, false

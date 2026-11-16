@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"fmt"
+	"time"
+)
+
 // starting returns the Starting life when ask is its outstanding question and its kind matches:
 // fresh for StartTask answers, not fresh for a resume. Otherwise it records why the event is stale.
 func (x *tx) starting(ask AskID, fresh bool) (Starting, bool) {
@@ -25,7 +30,7 @@ func (x *tx) onSlotGranted(ev SlotGranted) {
 	x.t.Machine = ev.Machine
 	x.t.AgentRun++
 	x.t.BoxGen++
-	x.t.Life = Starting{Since: x.now, Phase: phasePreparing, Ask: ask}
+	x.t.Life = Starting{Since: x.now, Until: x.startUntil(), Phase: phasePreparing, Ask: ask}
 	x.note(EntryPhase, phasePreparing)
 	x.emit(StartTask{Ask: ask, Run: x.t.AgentRun, Gen: x.t.BoxGen})
 }
@@ -65,5 +70,33 @@ func (x *tx) onStartFailed(ev StartFailed) {
 	}
 	x.note(EntryError, ev.Err)
 	x.t.Life = Ended{Outcome: OutcomeFailed, At: x.now, Error: ev.Err, ReleasedAt: x.now}
+	x.emit(Release{}, RunScheduler{})
+}
+
+// startUntil is when a start begun now is given up on. A zero budget never gives up.
+func (x *tx) startUntil() time.Time {
+	if x.p.StartBudget <= 0 {
+		return time.Time{}
+	}
+	return x.now.Add(x.p.StartBudget)
+}
+
+// onStartDue gives up on a start that has taken longer than the budget, so a hung machine cannot
+// hold a slot for ever. It ends the start as a stop would, but the run fails.
+func (x *tx) onStartDue(s Starting) {
+	if x.now.Before(s.Until) {
+		x.drop(DropNoop)
+		return
+	}
+	text := fmt.Sprintf("The computer did not start within %d minutes", int(x.p.StartBudget/time.Minute))
+	x.emit(AbortStart{})
+	if s.Resume != nil {
+		x.unwake(s, s.Ask)
+		x.note(EntryError, text)
+		x.releaseIfDue(x.t.Life.(Ended))
+		return
+	}
+	x.note(EntryError, text)
+	x.t.Life = Ended{Outcome: OutcomeFailed, At: x.now, Error: text, ReleasedAt: x.now}
 	x.emit(Release{}, RunScheduler{})
 }

@@ -17,14 +17,16 @@ type Policy struct {
 	ReplaceBackoff []time.Duration
 	BoxStartGrace  time.Duration
 	CloseGrace     time.Duration
+	StartBudget    time.Duration
 	KeepFinished   time.Duration
 }
 
 // DefaultPolicy is the prototype's numbers: nudges after 3, 10 and 10 minutes, two minutes of
 // real work resets the ladder, give up 30 minutes after the third nudge, check on an unattended
-// agent that has not reported a turn after 10 minutes, sleep the box after 30
-// idle minutes, wait 4 s before replacing a lost box and retry a failed replacement after 30 s,
-// 2 and 5 minutes, call a box start more than 30 s after our own start a restart, wait 2 minutes for the summary, and keep a finished task's computer a day.
+// agent that has not reported a turn after 10 minutes, sleep the box after 30 idle minutes, wait
+// 4 s before replacing a lost box and retry a failed replacement after 30 s, 2 and 5 minutes, call
+// a box start more than 30 s after our own start a restart, wait 2 minutes for the summary, give
+// up on a start after 30 minutes, and keep a finished task's computer a day.
 func DefaultPolicy() Policy {
 	return Policy{
 		NudgeAfter:     []time.Duration{3 * time.Minute, 10 * time.Minute, 10 * time.Minute},
@@ -36,6 +38,7 @@ func DefaultPolicy() Policy {
 		ReplaceBackoff: []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute},
 		BoxStartGrace:  30 * time.Second,
 		CloseGrace:     2 * time.Minute,
+		StartBudget:    30 * time.Minute,
 		KeepFinished:   24 * time.Hour,
 	}
 }

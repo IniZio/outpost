@@ -19,8 +19,8 @@ func TestAQueuedTaskStartsOnItsMachine(t *testing.T) {
 	if kinds(res.Effects) != "StartTask" || r.task.Phase() != "Preparing the computer" {
 		t.Errorf("effects %q, phase %q", kinds(res.Effects), r.task.Phase())
 	}
-	if _, armed := r.task.NextDeadline(); armed {
-		t.Error("a starting task has a deadline before its agent is up")
+	if at, armed := r.task.NextDeadline(); !armed || !at.Equal(t0.Add(r.policy.StartBudget)) {
+		t.Errorf("a starting task is given up on at %v, armed %v; want the start budget", at, armed)
 	}
 }
 
@@ -115,5 +115,65 @@ func TestStoppingAWakeGivesTheOldRunBack(t *testing.T) {
 	r.want(domain.StatusDone)
 	if got, ok := r.task.Life.(domain.Ended); !ok || got.Summary != "Opened a PR." {
 		t.Errorf("life = %+v, want the old Ended back whole", r.task.Life)
+	}
+}
+
+func TestAStartThatTakesTooLongFailsAndFreesItsSlot(t *testing.T) {
+	r := newRun(t, domain.KindInteractive, spec())
+	r.apply(domain.SlotGranted{Machine: "m1"})
+	ask := latest[domain.StartTask](r).Ask
+	r.advance(r.policy.StartBudget - time.Second)
+	r.dropped(domain.Tick{}, domain.DropNoop)
+
+	r.advance(time.Second)
+	res := r.apply(domain.Tick{})
+	r.want(domain.StatusFailed)
+	if kinds(res.Effects) != "AbortStart,Release,RunScheduler" {
+		t.Errorf("effects = %q: the start is cancelled, then its box released", kinds(res.Effects))
+	}
+	if e := lastEntry(r); e.Kind != domain.EntryError || e.Text != "The computer did not start within 30 minutes" {
+		t.Errorf("last entry %+v", e)
+	}
+	r.dropped(domain.Started{Ask: ask}, domain.DropStaleLife)
+}
+
+func TestAWakeThatTakesTooLongGivesTheEndedRunBack(t *testing.T) {
+	r := stopped(t)
+	r.apply(domain.UserMessage{By: owner, Text: "carry on"})
+	wake := latest[domain.EnsureRunning](r)
+
+	r.advance(r.policy.StartBudget)
+	res := r.apply(domain.Tick{})
+	r.want(domain.StatusStopped)
+	if kinds(res.Effects) != "AbortStart,StopBox" {
+		t.Errorf("effects = %q", kinds(res.Effects))
+	}
+	if e := r.task.Life.(domain.Ended); e.Ensure != wake.Ask {
+		t.Errorf("ended waits for ask %d, want the wake's %d: its answer must still be taken", e.Ensure, wake.Ask)
+	}
+	requireBoxStopped(t, r.apply(domain.Ensured{Ask: wake.Ask, Revived: true}))
+}
+
+func TestAZeroStartBudgetNeverGivesUp(t *testing.T) {
+	r := newRun(t, domain.KindInteractive, spec())
+	r.policy.StartBudget = 0
+	r.apply(domain.SlotGranted{Machine: "m1"})
+	if _, armed := r.task.NextDeadline(); armed {
+		t.Error("a start with no budget has a deadline")
+	}
+}
+
+func TestAWakeThatOutlastsTheKeepTimeReleasesTheComputerWhenItGivesUp(t *testing.T) {
+	r := stopped(t)
+	r.apply(domain.UserMessage{By: owner, Text: "carry on"})
+	wake := latest[domain.EnsureRunning](r)
+
+	r.advance(r.policy.KeepFinished)
+	res := r.apply(domain.Tick{})
+	if !has[domain.Release](res.Effects) {
+		t.Errorf("effects = %q: the keep time ran out while the wake hung", kinds(res.Effects))
+	}
+	if e := r.task.Life.(domain.Ended); !e.IsReleased() || e.Ensure != wake.Ask {
+		t.Errorf("ended %+v: want it released, still waiting for the wake's answer", e)
 	}
 }

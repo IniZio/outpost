@@ -143,7 +143,7 @@ func (x *tx) wake(e Ended, text string) error {
 	}
 	ask := x.newAsk()
 	x.t.AgentRun++
-	x.t.Life = Starting{Since: x.now, Phase: "Waking the box", Ask: ask, Resume: &e, Messages: messages}
+	x.t.Life = Starting{Since: x.now, Until: x.startUntil(), Phase: "Waking the box", Ask: ask, Resume: &e, Messages: messages}
 	x.note(EntryPhase, "Waking the box")
 	x.emit(EnsureRunning{Ask: ask, Run: x.t.AgentRun, Gen: x.t.BoxGen})
 	return nil

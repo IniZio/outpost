@@ -15,7 +15,9 @@ func (x *tx) onTick() {
 		x.onCloseDue(l)
 	case Ended:
 		x.onReleaseDue(l)
-	case Queued, Starting:
+	case Starting:
+		x.onStartDue(l)
+	case Queued:
 		x.drop(DropNoop)
 	}
 }
@@ -36,13 +38,19 @@ func (x *tx) onCloseDue(c Closing) {
 // onReleaseDue cleans up a finished task's computer once its keep time is over. This replaces
 // the prototype's gc loop.
 func (x *tx) onReleaseDue(e Ended) {
-	if !e.releasable() || x.now.Before(e.ReleaseAt) {
+	if !x.releaseIfDue(e) {
 		x.drop(DropNoop)
-		return
+	}
+}
+
+func (x *tx) releaseIfDue(e Ended) bool {
+	if !e.releasable() || x.now.Before(e.ReleaseAt) {
+		return false
 	}
 	e.ReleasedAt = x.now
 	x.t.Life = e
 	x.emit(Release{})
+	return true
 }
 
 // tickActive runs each due deadline in priority order, so a timeout beats a nudge. A deadline is
