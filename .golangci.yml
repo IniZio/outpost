@@ -8,8 +8,10 @@ linters:
   enable:
     - depguard
     - errorlint
+    - exhaustive
     - forbidigo
     - funlen
+    - gochecksumtype
     - gocognit
     - revive
     - wrapcheck
@@ -18,6 +20,10 @@ linters:
       min-complexity: 10
     funlen:
       lines: 60
+    gochecksumtype:
+      default-signifies-exhaustive: false
+    exhaustive:
+      default-signifies-exhaustive: true
     revive:
       rules:
         - name: argument-limit
