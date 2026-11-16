@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 
 	"github.com/IniZio/outpost/internal/domain"
 )
@@ -33,6 +34,9 @@ type Plan struct {
 	CA     []byte            // the proxy's CA, trusted before the first clone; nil for none
 	Launch Launch            // the agent terminal, labelled with Target.Run
 }
+
+// ErrNotRunning is a box that cannot be reached right now: its machine is offline or relinking.
+var ErrNotRunning = errors.New("boxes: the box cannot be reached right now")
 
 // Progress is how Converge reports a phase ("Cloning x/y") while it runs. Lifecycle applies each
 // call as a Progressed event before it returns, so the timeline shows phases in order. It may be
@@ -99,7 +103,8 @@ type Boxes interface {
 	Observe(ctx context.Context, t Target) (domain.AgentObservation, error)
 
 	// Screen reads the agent terminal of t.Run as text: its screen plus lines of history above it.
-	// A missing box or terminal is "" with no error.
+	// A missing box or terminal is "" with no error. A machine that cannot be reached right now
+	// is ErrNotRunning.
 	Screen(ctx context.Context, t Target, lines int) (string, error)
 	// Inspect reports the settled state of the box of t.Gen.
 	Inspect(ctx context.Context, t Target) (BoxState, error)

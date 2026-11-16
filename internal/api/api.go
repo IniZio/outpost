@@ -159,6 +159,7 @@ var problems = []problem{
 	{domain.ErrBadPairing, http.StatusUnprocessableEntity, "invalid"},
 	{domain.ErrExecNotTool, http.StatusUnprocessableEntity, "invalid"},
 	{domain.ErrNotReady, http.StatusConflict, "not_ready"},
+	{lifecycle.ErrNotRunning, http.StatusConflict, "not_running"},
 	{domain.ErrClosing, http.StatusConflict, "closing"},
 	{domain.ErrEnrollUsed, http.StatusConflict, "used"},
 	{domain.ErrReleased, http.StatusGone, "released"},

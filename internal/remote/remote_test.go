@@ -201,3 +201,10 @@ func TestWatchDeliversSignalsAndEndsOnRevoke(t *testing.T) {
 		t.Fatal("links are required")
 	}
 }
+
+func TestAScreenOfAnOfflineMachineIsNotRunning(t *testing.T) {
+	_, _, b := setup(t)
+	if _, err := b.Screen(ctx(t), ports.Target{Task: 1, Machine: "gone", Run: 1, Gen: 1}, 0); !errors.Is(err, ports.ErrNotRunning) {
+		t.Fatalf("an unlinked machine: %v", err)
+	}
+}

@@ -20,6 +20,9 @@ var ErrNotLeading = errors.New("lifecycle: this server is not driving tasks righ
 // ErrNotFound is returned for an unknown task.
 var ErrNotFound = ports.ErrNotFound
 
+// ErrNotRunning is a screen asked of a box that cannot be reached right now.
+var ErrNotRunning = ports.ErrNotRunning
+
 // Budgets bound each effect. They are mechanism, not rules: they guarantee that every ask gets its
 // answer and that a stuck machine cannot hold a lane. A zero field takes the default. Start and
 // Template sit above the domain's StartBudget and SaveBudget, so the domain decides when a start or

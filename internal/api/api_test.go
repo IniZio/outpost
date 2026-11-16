@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/IniZio/outpost/internal/api"
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/lifecycle"
+	"github.com/IniZio/outpost/internal/ports"
 	"github.com/IniZio/outpost/internal/ports/portstest"
 )
 
@@ -197,5 +199,21 @@ func TestEveryRefusalHasAStatus(t *testing.T) {
 	}
 	if api.StatusOf(context.Canceled) != http.StatusInternalServerError {
 		t.Error("anything else is a 500")
+	}
+}
+
+func TestAScreenOfAnUnreachableBoxIsNotRunning(t *testing.T) {
+	g := newRig(t)
+	tk, err := g.owner.CreateTask(ctx(t), client.NewTask{Repo: "acme/app", Prompt: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the task has a box", func() bool {
+		got, _ := g.owner.Task(ctx(t), tk.ID)
+		return got.Machine != ""
+	})
+	g.boxes.Fail("Screen", fmt.Errorf("remote: screen: %w", ports.ErrNotRunning))
+	if _, err := g.owner.Screen(ctx(t), tk.ID, 0); code(err) != "not_running" {
+		t.Fatalf("an offline machine's screen: %v", err)
 	}
 }

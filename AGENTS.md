@@ -13,7 +13,8 @@ make ci             # lint, audit, test, build
 - `make lint` checks formatting (gofumpt, goimports), runs golangci-lint, and runs typos.
 - `make audit` runs govulncheck and fails on an untidy `go.mod`.
 - `make proxy-image` builds the credential proxy in `images/proxy` (mitmproxy and an addon). Its Python tests run during the build.
-- `make test` runs `go test -race -cover`. The Postgres tests skip unless `OUTPOST_TEST_DATABASE_URL` is set. `make test-pg` starts a throwaway `postgres:17` container on a free port and runs them, and CI does the same with a service container. Each test makes its own database.
+- `make test` runs `go test -race -cover`. The Postgres tests skip unless `OUTPOST_TEST_DATABASE_URL` is set. `make test-pg` starts a throwaway `postgres:17` container on a free port and runs the tests of `internal/store/...` and `cmd/...` against it, and CI does the same with a service container. Each test makes its own database.
+- `make it` runs the Docker integration tests (`internal/boxchain` and the serve, agent and Docker end-to-end test in `cmd/outpost`). It starts its own Postgres container, labels everything it makes with a run id, and sweeps it all at the end. It needs `hc` on the PATH.
 - Lint tools are pinned in `tools/go.mod` and run with `go tool -modfile=tools/go.mod`.
 - `GOTOOLCHAIN=local` is set by `mise.toml` and the Makefile, so the pinned Go is the one that runs.
 
@@ -24,6 +25,7 @@ make ci             # lint, audit, test, build
 | `cmd/outpost` | The server: `serve`, `migrate`, `images` | everything server-side |
 | `cmd/outpost-agent` | The machine agent: `pair`, `run` | `domain`, `link`, `machine`, `ops`, `sandbox/*` |
 | `cmd/outpost-cli` | The laptop client | `api/client` |
+| `api/client` | The API's wire types and Go client, shared by `internal/api` and the CLI | standard library only |
 | `internal/domain` | Types, the task state machine, the `Clock` seam. No I/O. | standard library only |
 | `internal/ports` | The interfaces: Boxes (a task's box and the agent terminal in it), Agent, Secrets, Store, Enrollments, and Sandbox (the box provider) | `domain` |
 | `internal/ports/portstest` | In-memory fakes of the ports, for tests of the core and of adapters | `domain`, `ports` |
@@ -38,9 +40,12 @@ make ci             # lint, audit, test, build
 | `internal/store/*` | Stores. They implement `link.KeyStore` and `link.Presence` structurally, because those interfaces name only domain types. | `domain`, `ports` |
 | `internal/sandbox/*`, `agent/*`, `secrets`, `auth`, `github`, `schedule` | Adapters | `domain`, `ports` |
 | `internal/egress` | Proxy policy and box egress | `domain`, `ports`, `secrets` |
-| `internal/api` | HTTP API, `/mcp`, websockets, web UI | `domain`, `lifecycle`, `schedule`, `auth`, `toolmachine` |
+| `internal/api` | HTTP API, `/mcp`, websockets, web UI | `api/client`, `domain`, `lifecycle`, `schedule`, `auth`, `toolmachine` |
 
 depguard enforces this table. Other rules:
+
+- The API's tests may also import `api`, `ports` and `portstest`, because they drive a real Runner over the in-memory fakes.
+- Each adapter tests itself from inside its own package, because the adapter rule does not let a package import itself from an external test package.
 
 - Read the time only through `domain.Clock`. `time.Now` fails lint everywhere else.
 - Only adapters (`sandbox`, `agent`, `machine`) run commands with `os/exec`.
@@ -52,3 +57,7 @@ depguard enforces this table. Other rules:
 - Commit subjects start with Add, Fix, Remove, Update, Refactor or Test, are 50 characters or fewer, and have no body.
 - Keep host names, IP addresses, client repo names, people's details and links to private docs out of committed files.
 - Keep custom code small. Prefer stock tools: Docker, hc, gh and Claude Code.
+
+## Deploy
+
+`deploy/` holds the one-host deploy: systemd user units for `outpost-go serve` and `outpost-go-agent run`, `stack.sh` for Postgres (`ob-pg`) and the credential proxy (`ob-proxy`), and `env.example`, which lists every `OUTPOST_*` setting. A test fails when the code reads a setting the template does not list. Names and ports stay apart from the prototype's (port 7300, the `outpost` network, `outpost-proxy`).
