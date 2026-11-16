@@ -61,13 +61,12 @@ func newWorld(t *testing.T) *world {
 }
 
 func (w *world) build(t *testing.T) {
-	hcBin, err := exec.LookPath("hc")
-	if err != nil {
+	if _, err := exec.LookPath("hc"); err != nil {
 		t.Skip("hc is not installed")
 	}
 	ctx := t.TempDir()
 	files, _ := filepath.Glob("../../images/tools/*")
-	for _, f := range append(files, hcBin) {
+	for _, f := range files {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

@@ -87,6 +87,28 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha,scope=proxy
           cache-to: type=gha,mode=max,scope=proxy
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: images/box
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/inizio/outpost-box:${{ env.VERSION }}
+            ghcr.io/inizio/outpost-box:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=box
+          cache-to: type=gha,mode=max,scope=box
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: images/tools
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/inizio/outpost-tools:${{ env.VERSION }}
+            ghcr.io/inizio/outpost-tools:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=tools
+          cache-to: type=gha,mode=max,scope=tools
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v3.19.5

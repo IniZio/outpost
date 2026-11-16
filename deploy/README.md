@@ -40,6 +40,8 @@ CI publishes, on each push to `go`, at version `0.0.0-go.<run number>`:
 | --- | --- |
 | Server image | `ghcr.io/inizio/outpost:<version>`, also tagged `sha-<commit>` |
 | Proxy image | `ghcr.io/inizio/outpost-proxy:<version>` |
+| Box base image | `ghcr.io/inizio/outpost-box:<version>`, the chart's `baseImage` |
+| Tools image | `ghcr.io/inizio/outpost-tools:<version>`, each machine's `OUTPOST_TOOLS_IMAGE` (hc is pinned in `images/tools/Dockerfile` with checksums) |
 | Helm chart | `oci://ghcr.io/inizio/charts/outpost`, version `<version>` |
 
 The chart (`deploy/helm/outpost`) is one Deployment with one replica and a rolling update of `maxSurge: 1, maxUnavailable: 0`. The new pod becomes ready as a standby, the old pod drains its links on SIGTERM, and the lease hands over. `outpost migrate` runs in an init container, and the server then starts with `OUTPOST_MIGRATE=false`. The chart refuses to render when a required value is empty, and the error names the key.
