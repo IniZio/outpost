@@ -15,15 +15,16 @@ import (
 
 // A test catalogue stands in for internal/ops: the link package never imports the real one.
 var (
-	tcat   = NewCatalogue()
-	tEcho  = NewOp[struct{ S string }, struct{ S string }](tcat, "t.echo", ServedByAgent)
-	tHang  = NewOp[struct{}, struct{}](tcat, "t.hang", ServedByAgent)
-	tExec  = NewOp[struct{}, struct{}](tcat, "t.exec", ServedByAgent, CapExec)
-	tBad   = NewOp[badReq, struct{}](tcat, "t.bad", ServedByAgent)
-	tPipe  = NewStreamOp[struct{ N int }, struct{ N int }](tcat, "t.pipe", ServedByAgent)
-	tWatch = NewResumableOp[struct{ ID string }, struct{ Opens int }](tcat, "t.watch", ServedByAgent)
-	tFail  = NewOp[struct{ Kind string }, struct{}](tcat, "t.fail", ServedByAgent)
-	tRep   = NewOp[struct{ MemFree int }, struct{}](tcat, "t.report", ServedByServer)
+	tcat      = NewCatalogue()
+	tEcho     = NewOp[struct{ S string }, struct{ S string }](tcat, "t.echo", ServedByAgent)
+	tHang     = NewOp[struct{}, struct{}](tcat, "t.hang", ServedByAgent)
+	tExec     = NewOp[struct{}, struct{}](tcat, "t.exec", ServedByAgent, CapExec)
+	tBad      = NewOp[badReq, struct{}](tcat, "t.bad", ServedByAgent)
+	tPipe     = NewStreamOp[struct{ N int }, struct{ N int }](tcat, "t.pipe", ServedByAgent)
+	tWatch    = NewResumableOp[struct{ ID string }, struct{ Opens int }](tcat, "t.watch", ServedByAgent)
+	tFail     = NewOp[struct{ Kind string }, struct{}](tcat, "t.fail", ServedByAgent)
+	tSrvWatch = NewResumableOp[struct{}, struct{}](tcat, "t.srvwatch", ServedByServer)
+	tRep      = NewOp[struct{ MemFree int }, struct{}](tcat, "t.report", ServedByServer)
 )
 
 type badReq struct{}
@@ -69,6 +70,8 @@ func (f *fixed) session(context.Context) (*session, error) {
 }
 
 func (f *fixed) pacer() pacer { return f.p }
+
+func (f *fixed) attached() <-chan struct{} { return nil }
 
 func (f *fixed) set(s *session) { f.mu.Lock(); f.s = s; f.mu.Unlock() }
 

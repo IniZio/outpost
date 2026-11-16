@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"sync/atomic"
 	"time"
 
 	"github.com/IniZio/outpost/internal/domain"
@@ -20,6 +21,9 @@ type Caller interface {
 	session(ctx context.Context) (*session, error)
 	// pacer is how Hold waits between attempts on this caller.
 	pacer() pacer
+	// attached returns a channel that closes when a session next attaches, or nil if none ever
+	// will. Hold takes it before each attempt and cuts its backoff short when it closes.
+	attached() <-chan struct{}
 }
 
 // pacer is the waiting seam of Hold: the owning side's backoff, sleep and jitter, and the clock
@@ -52,8 +56,29 @@ func (p pacer) norm() pacer {
 	return p
 }
 
-func (p pacer) wait(ctx context.Context, attempt int) error {
-	return p.sleep(ctx, p.backoff.Delay(attempt, time.Duration(math.MaxInt64), p.jitter()))
+// wait sleeps the backoff for attempt, and returns early, with nil, when wake closes: the link the
+// caller was waiting for is up, so the rest of the backoff is pure delay.
+func (p pacer) wait(ctx context.Context, attempt int, wake <-chan struct{}) error {
+	sctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var woken atomic.Bool
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		select {
+		case <-wake:
+			woken.Store(true)
+			cancel()
+		case <-sctx.Done():
+		}
+	}()
+	err := p.sleep(sctx, p.backoff.Delay(attempt, time.Duration(math.MaxInt64), p.jitter()))
+	cancel()
+	<-stopped
+	if woken.Load() && ctx.Err() == nil {
+		return nil
+	}
+	return err
 }
 
 // Call runs a unary op on the peer and returns its typed reply. It returns:
@@ -108,11 +133,13 @@ func openStream[Req, Resp any](ctx context.Context, c Caller, s spec, req Req) (
 // peer finished" and "a drain cut it" look the same. Hold therefore treats every end of the stream
 // alike. It stops only when ctx ends, when the server it holds on is draining (the next server
 // holds again from its own state), or when the peer refuses the op with a reason ("no such box").
-// Between openings it backs off with the owning side's schedule, growing while streams die young.
+// Between openings it backs off with the owning side's schedule, growing while streams die young, and
+// opens again at once when a session attaches to c meanwhile.
 func Hold[Req, Resp any](ctx context.Context, c Caller, op ResumableOp[Req, Resp], req Req, use func(context.Context, Resp, Stream)) error {
 	p := c.pacer().norm()
 	fails := 0
 	for ctx.Err() == nil {
+		woke := c.attached()
 		start := p.now()
 		resp, st, err := openStream[Req, Resp](ctx, c, op.s, req)
 		if err != nil && !retryable(err) {
@@ -122,7 +149,7 @@ func Hold[Req, Resp any](ctx context.Context, c Caller, op ResumableOp[Req, Resp
 			holdUse(ctx, resp, st, use)
 		}
 		fails = p.backoff.Next(fails, p.now().Sub(start))
-		if err := p.wait(ctx, fails); err != nil {
+		if err := p.wait(ctx, fails, woke); err != nil {
 			return err
 		}
 	}

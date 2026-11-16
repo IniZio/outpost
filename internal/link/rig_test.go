@@ -505,3 +505,29 @@ func TestAgentShutdownLetsAFiniteOpFinish(t *testing.T) {
 	}
 	<-stopped
 }
+
+func TestHoldOnAnOfflineMachineReopensAsSoonAsItLinks(t *testing.T) {
+	rig, w := newRig(t, func(o *linktest.Options) {
+		o.Timing = linktest.FastTiming()
+		o.Timing.LinkWait = 50 * time.Millisecond
+		o.Backoff = linktest.FastBackoff()
+		o.Backoff.Base, o.Backoff.Max = 10*time.Second, time.Minute
+	})
+	rig.Stop()
+	if !linktest.Eventually(func() bool { return !rig.Store.Online(rig.Machine) }) {
+		t.Fatal("the store must learn the machine went offline")
+	}
+	time.Sleep(100 * time.Millisecond)
+	l := rig.Hub.Link(rig.Machine)
+	ctx := deadline(t, 10*time.Second)
+	go func() {
+		_ = link.Hold(ctx, l, watch, text{"box-1"}, func(_ context.Context, _ struct{ Opens int }, s link.Stream) { _, _ = io.Copy(io.Discard, s) })
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	rig.Restart()
+	start := clock.Now()
+	if !linktest.Eventually(func() bool { return w.watcherOpens("box-1") == 1 }) || clock.Now().Sub(start) > 2*time.Second {
+		t.Fatalf("a hold waiting out its backoff must reopen when the machine links, opens %d after %v", w.watcherOpens("box-1"), clock.Now().Sub(start))
+	}
+}

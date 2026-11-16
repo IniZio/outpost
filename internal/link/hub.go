@@ -166,7 +166,7 @@ func (h *Hub) Link(id domain.MachineID) *Link {
 	defer h.mu.Unlock()
 	l, ok := h.links[id]
 	if !ok {
-		l = &Link{id: id, hub: h, changed: make(chan struct{})}
+		l = &Link{id: id, hub: h}
 		h.links[id] = l
 	}
 	return l
@@ -249,9 +249,9 @@ type Link struct {
 	hub *Hub
 	cur atomic.Pointer[session] // read lock-free by every Call
 
-	mu      sync.Mutex // guards the two fields below, and orders attach and detach
-	changed chan struct{}
-	gone    bool // Kick ended the link: do not wait for it to return
+	mu   sync.Mutex // guards gone, and orders attach and detach
+	up   attachSignal
+	gone bool // Kick ended the link: do not wait for it to return
 }
 
 // Machine is the id this link is for.
@@ -265,6 +265,8 @@ func (l *Link) Info() (Info, bool) {
 	}
 	return s.info, true
 }
+
+func (l *Link) attached() <-chan struct{} { return l.up.next() }
 
 func (l *Link) pacer() pacer {
 	c := l.hub.cfg
@@ -302,7 +304,7 @@ func (l *Link) look() (*session, <-chan struct{}, bool) {
 	if s := l.cur.Load(); s != nil && !s.mux.IsClosed() {
 		return s, nil, false
 	}
-	return nil, l.changed, l.gone
+	return nil, l.up.next(), l.gone
 }
 
 // moving is how much longer a Call that began at start may wait for the machine's link. A failed
@@ -352,8 +354,7 @@ func (l *Link) attach(s *session) (retire *session) {
 	}
 	retire = l.cur.Swap(s)
 	l.gone = false
-	close(l.changed)
-	l.changed = make(chan struct{})
+	l.up.fire()
 	return retire
 }
 

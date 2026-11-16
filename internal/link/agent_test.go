@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -312,5 +313,35 @@ func TestErrorTextsNameTheirCause(t *testing.T) {
 	}
 	if got := (&RefusedError{Reason: "unauthorized"}).Error(); !strings.Contains(got, "unauthorized") {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestHoldOnTheServerReopensAsSoonAsTheAgentAttaches(t *testing.T) {
+	th := newTestHub(t, nil)
+	slow := shortBackoff()
+	slow.Base, slow.Max = 10*time.Second, time.Minute
+	a, err := NewAgent(AgentConfig{URL: th.wsURL(), ID: th.id, Key: th.key, Reg: newAgentSide(t, 0).reg, Timing: shortTiming(), Backoff: slow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened := make(chan struct{}, 4)
+	sreg := serverReg()
+	HandleResumable(sreg, tSrvWatch, func(context.Context, Meta, struct{}) (struct{}, Bytes, error) {
+		opened <- struct{}{}
+		return struct{}{}, func(ctx context.Context, _ Stream) error { <-ctx.Done(); return nil }, nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = Hold(ctx, a.Server(), tSrvWatch, struct{}{}, func(_ context.Context, _ struct{}, s Stream) { _, _ = io.Copy(io.Discard, s) })
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	_, agt := pair(t, newAgentSide(t, 0).reg, sreg, DefaultTiming(), 0)
+	a.attach(agt)
+	select {
+	case <-opened:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a hold backing off on an offline server must reopen when the agent attaches")
 	}
 }

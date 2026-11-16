@@ -74,7 +74,7 @@ func New(t testing.TB, o Options) *Rig {
 	if o.Machine.Role == 0 {
 		o.Machine.Role, o.Machine.Slots = domain.RoleSandbox, 1
 	}
-	r := &Rig{Store: NewStore(), t: t, o: o, conns: &tracker{}, done: make(chan struct{})}
+	r := &Rig{Store: NewStore(), t: t, o: o, conns: &tracker{}}
 	r.Machine, r.Key = r.Store.Pair(o.Machine)
 	r.startServer()
 	r.Hub = r.NextHub()
@@ -136,7 +136,8 @@ func (r *Rig) startAgent() {
 	r.Agent = a
 	ctx, cancel := context.WithCancel(context.Background())
 	r.stop = cancel
-	go func() { defer close(r.done); _ = a.Run(ctx) }()
+	r.done = make(chan struct{})
+	go func(done chan struct{}) { defer close(done); _ = a.Run(ctx) }(r.done)
 	r.t.Cleanup(r.Stop)
 }
 
@@ -145,6 +146,10 @@ func (r *Rig) Stop() {
 	r.stop()
 	<-r.done
 }
+
+// Restart starts a new agent for the machine after Stop, as the service coming back does. It does
+// not wait for the link: use WaitLinked.
+func (r *Rig) Restart() { r.startAgent() }
 
 // WaitLinked blocks until hub has a live link to the rig's machine, or fails the test.
 func (r *Rig) WaitLinked(hub *link.Hub) {

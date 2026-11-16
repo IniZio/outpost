@@ -56,6 +56,7 @@ type Agent struct {
 	host string
 	ctl  *Registry
 	cur  atomic.Pointer[session]
+	up   attachSignal
 	st   atomic.Uint32
 
 	relink      chan struct{} // the server asked for a relink
@@ -137,6 +138,8 @@ func (p agentPeer) session(context.Context) (*session, error) {
 	}
 	return s, nil
 }
+
+func (p agentPeer) attached() <-chan struct{} { return p.a.up.next() }
 
 func (p agentPeer) pacer() pacer {
 	c := p.a.cfg
@@ -243,9 +246,14 @@ func (a *Agent) serveLink(ctx context.Context, sess *session) {
 }
 
 func (a *Agent) install(ctx context.Context, s *session) {
-	a.cur.Store(s)
+	a.attach(s)
 	a.setState(StateUp, nil)
 	go s.serve(context.WithoutCancel(ctx))
+}
+
+func (a *Agent) attach(s *session) {
+	a.cur.Store(s)
+	a.up.fire()
 }
 
 // release lets a session go at shutdown, giving its finite streams the drain budget. The session

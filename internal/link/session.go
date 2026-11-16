@@ -108,6 +108,8 @@ func (s *session) session(context.Context) (*session, error) { return s, nil }
 
 func (s *session) pacer() pacer { return pacer{} }
 
+func (s *session) attached() <-chan struct{} { return nil }
+
 // Done is closed when the mux dies: keepalive timeout, conn error, or Close.
 func (s *session) Done() <-chan struct{} { return s.mux.CloseChan() }
 
