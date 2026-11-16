@@ -50,8 +50,12 @@ type tx struct {
 // file named for its concern: command.go, start.go, agent.go, box.go, close.go, tick.go.
 func (x *tx) dispatch(ev Event) error {
 	switch ev := ev.(type) {
+	case UserMessage:
+		return x.onMessage(ev)
 	case UserStop:
 		return x.onStop(ev)
+	case UserResume:
+		return x.onResume(ev)
 	case SaveTemplateRequested:
 		return x.onSaveTemplate(ev)
 	case SlotGranted:
@@ -62,8 +66,12 @@ func (x *tx) dispatch(ev Event) error {
 		x.onReport(ev)
 	case AgentExited:
 		x.onExit(ev)
+	case BoxEvent:
+		x.onBoxEvent(ev)
 	case DoneMarker:
 		x.onDoneMarker(ev)
+	case Ensured:
+		x.onEnsured(ev)
 	case Progressed:
 		x.onProgressed(ev)
 	case Started:

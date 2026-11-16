@@ -55,7 +55,7 @@ func (t Task) validateStarting(s Starting) error {
 		t.keyed(),
 		rule{t.asked(s.Ask), "starting ask not issued"},
 		rule{earlyOK, "buffered event is not exactly one report or exit"},
-		rule{s.Resume != nil || s.Message == "", "a message is parked without a resume"},
+		rule{s.Resume != nil || len(s.Messages) == 0, "a message is parked without a resume"},
 		rule{s.Resume == nil || s.Resume.Outcome.Valid() && !s.Resume.IsReleased(), "resume of an unresumable run"},
 	)
 }

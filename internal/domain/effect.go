@@ -38,8 +38,9 @@ type StartTask struct {
 type AbortStart struct{}
 
 // EnsureRunning is idempotent for the box: it starts the box if it is down. It always leaves one
-// agent terminal running under Run, launching the agent with its own resume and replacing any
-// terminal still alive under an older run. Ensured.Revived is false when the box was already up.
+// agent terminal running under Run, launching the agent with its own resume and replacing a
+// terminal still alive under an older run. Ensured.Revived is false only when a terminal of Run
+// was already alive, as when the same ask is retried.
 type EnsureRunning struct {
 	Ask AskID
 	Run AgentRun

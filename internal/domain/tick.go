@@ -72,7 +72,10 @@ func (x *tx) runDeadline(k DeadlineKind) {
 		x.probeDue(WhyGiveUp)
 	case DlNudge:
 		x.probeDue(WhyNudge)
-	case DlReplace, DlSleep:
+	case DlReplace:
+		x.onReplaceDue()
+	case DlSleep:
+		x.onSleepDue()
 	}
 }
 

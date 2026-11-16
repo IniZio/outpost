@@ -25,16 +25,16 @@ type Queued struct{}
 // Progressed, then Started or StartFailed.
 //
 // When Resume is set the task is waking an ended one. The Ended value is kept so a failed wake
-// puts the task back exactly as it was. Message was typed by the owner to wake the task and is
+// puts the task back exactly as it was. Messages were typed by the owner to wake the task and are
 // delivered once the agent is up. Early holds agent reports and exits that arrived before the
 // answer and are replayed when it comes.
 type Starting struct {
-	Since   time.Time
-	Phase   string
-	Ask     AskID
-	Resume  *Ended
-	Message string
-	Early   []Early
+	Since    time.Time
+	Phase    string
+	Ask      AskID
+	Resume   *Ended
+	Messages []string
+	Early    []Early
 }
 
 // Early is an agent report or exit that beat the answer to StartTask or EnsureRunning. Exactly
