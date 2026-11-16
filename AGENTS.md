@@ -21,14 +21,15 @@ make ci             # lint, audit, test, build
 | Package | Job | May import (inside Outpost) |
 | --- | --- | --- |
 | `cmd/outpost` | The server: `serve`, `migrate`, `images` | everything server-side |
-| `cmd/outpost-agent` | The machine agent: `pair`, `run` | `link`, `machine`, `sandbox/*` |
+| `cmd/outpost-agent` | The machine agent: `pair`, `run` | `domain`, `link`, `machine`, `ops`, `sandbox/*` |
 | `cmd/outpost-cli` | The laptop client | `api/client` |
 | `internal/domain` | Types, the task state machine, the `Clock` seam. No I/O. | standard library only |
 | `internal/ports` | The interfaces: Sandbox, Agent, Terminal, Store, Secrets, GitHub | `domain` |
 | `internal/lifecycle` | Runs a task from start to clean-up | `domain`, `ports` |
-| `internal/link` | The machine link | `domain` |
-| `internal/machine` | The agent's fixed operations, over the link | `domain`, `ports`, `link` |
-| `internal/toolmachine` | Machine tools for tasks on a tool machine such as a Mac | `domain`, `ports`, `link` |
+| `internal/link` | The machine link: transport, handshake, relink. Knows no operation. | `domain` |
+| `internal/ops` | The catalogue of operations that cross the link: names, kinds and typed requests and replies. No behaviour. | `domain`, `link` |
+| `internal/machine` | The agent's fixed operations, over the link | `domain`, `ports`, `link`, `ops` |
+| `internal/toolmachine` | Machine tools for tasks on a tool machine such as a Mac | `domain`, `ports`, `link`, `ops` |
 | `internal/sandbox/*`, `agent/*`, `terminal/*`, `store/*`, `secrets`, `auth`, `github`, `schedule` | Adapters | `domain`, `ports` |
 | `internal/egress` | Proxy policy and box egress | `domain`, `ports`, `secrets` |
 | `internal/api` | HTTP API, `/mcp`, websockets, web UI | `domain`, `lifecycle`, `schedule`, `auth`, `toolmachine` |

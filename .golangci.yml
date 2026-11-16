@@ -64,6 +64,14 @@ linters:
           allow:
             - github.com/IniZio/outpost/internal/domain
             - github.com/IniZio/outpost/internal/link
+        ops:
+          files: ["**/internal/ops/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/link
+            - github.com/IniZio/outpost/internal/ops
         machine:
           files: ["**/internal/machine/**", "**/internal/toolmachine/**"]
           list-mode: lax
@@ -72,6 +80,7 @@ linters:
             - github.com/IniZio/outpost/internal/domain
             - github.com/IniZio/outpost/internal/ports
             - github.com/IniZio/outpost/internal/link
+            - github.com/IniZio/outpost/internal/ops
         adapters:
           files:
             - "**/internal/sandbox/**"
@@ -110,8 +119,10 @@ linters:
           list-mode: lax
           deny: *internal
           allow:
+            - github.com/IniZio/outpost/internal/domain
             - github.com/IniZio/outpost/internal/link
             - github.com/IniZio/outpost/internal/machine
+            - github.com/IniZio/outpost/internal/ops
             - github.com/IniZio/outpost/internal/sandbox
         client:
           files: ["**/cmd/outpost-cli/**", "**/api/client/**"]
