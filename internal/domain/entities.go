@@ -13,12 +13,15 @@ const (
 
 // Machine is a computer attached through the machine agent. Slots is how many boxes a sandbox
 // machine runs at once, or how many claims a tool machine serves. A machine runs only its owner's
-// boxes.
+// boxes. Exec is the opt-in a tool machine's owner gave at pairing to run commands on the machine
+// itself. A sandbox machine never has it.
 type Machine struct {
 	ID    MachineID
+	Name  string
 	Owner Login
 	Role  MachineRole
 	Slots int
+	Exec  bool
 }
 
 // CanHost is the one place the owner-only rule lives.
