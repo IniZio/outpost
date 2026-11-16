@@ -446,6 +446,7 @@ export async function resume(id: number) {
   const user = userOf(t);
   const c = dk.names(id, user.login);
   if (t.released_at) throw new Error("this task's computer was already cleaned up; start a new task");
+  if (t.status === "queued" || t.status === "starting") throw new Error("this task's computer isn't ready yet; try again once it has started");
   taskEvent(id, "phase", "Waking the box");
   await withBox(id, () => dk.startBox(id, c, boxSpecFor(t, user)));
   const term = await hc.getTerminal(agentAddress(id));
