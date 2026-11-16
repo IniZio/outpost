@@ -24,22 +24,25 @@ make ci             # lint, audit, test, build
 | `cmd/outpost-agent` | The machine agent: `pair`, `run` | `domain`, `link`, `machine`, `ops`, `sandbox/*` |
 | `cmd/outpost-cli` | The laptop client | `api/client` |
 | `internal/domain` | Types, the task state machine, the `Clock` seam. No I/O. | standard library only |
-| `internal/ports` | The interfaces: Boxes (a task's box and the agent terminal in it), Agent, Secrets, Store, Enrollments | `domain` |
+| `internal/ports` | The interfaces: Boxes (a task's box and the agent terminal in it), Agent, Secrets, Store, Enrollments, and Sandbox (the box provider) | `domain` |
 | `internal/ports/portstest` | In-memory fakes of the ports, for tests of the core and of adapters | `domain`, `ports` |
 | `internal/lifecycle` | Runs a task from start to clean-up | `domain`, `ports` |
 | `internal/link` | The machine link: transport, handshake, relink. Knows no operation. | `domain` |
 | `internal/ops` | The catalogue of operations that cross the link: names, kinds and typed requests and replies. No behaviour. | `domain`, `link` |
-| `internal/machine` | The agent's fixed operations, over the link | `domain`, `ports`, `link`, `ops` |
+| `internal/machine` | The agent's fixed operations, over the link: box jobs, converge steps, the watch feed | `domain`, `ports`, `link`, `ops`, `hc` |
+| `internal/hc` | herdr-core's JSON-RPC client, and `hctest`, a fake core | standard library only |
+| `internal/remote` | `ports.Boxes` over the link, on the server | `domain`, `ports`, `link`, `ops` |
+| `internal/boxchain` | Tests only: the box adapters joined end to end, and the Docker integration test | the box packages |
 | `internal/toolmachine` | Machine tools for tasks on a tool machine such as a Mac | `domain`, `ports`, `link`, `ops` |
 | `internal/store/*` | Stores. They implement `link.KeyStore` and `link.Presence` structurally, because those interfaces name only domain types. | `domain`, `ports` |
-| `internal/sandbox/*`, `agent/*`, `terminal/*`, `secrets`, `auth`, `github`, `schedule` | Adapters | `domain`, `ports` |
+| `internal/sandbox/*`, `agent/*`, `secrets`, `auth`, `github`, `schedule` | Adapters | `domain`, `ports` |
 | `internal/egress` | Proxy policy and box egress | `domain`, `ports`, `secrets` |
 | `internal/api` | HTTP API, `/mcp`, websockets, web UI | `domain`, `lifecycle`, `schedule`, `auth`, `toolmachine` |
 
 depguard enforces this table. Other rules:
 
 - Read the time only through `domain.Clock`. `time.Now` fails lint everywhere else.
-- Only adapters (`sandbox`, `agent`, `terminal`, `machine`) run commands with `os/exec`.
+- Only adapters (`sandbox`, `agent`, `machine`) run commands with `os/exec`.
 - Adapters never import each other. A new provider or agent is a new package and one line in `cmd`.
 - Functions stay under cognitive complexity 10, 60 lines and 6 arguments. Errors are checked and wrapped.
 

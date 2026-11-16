@@ -166,7 +166,7 @@ func (h *Hub) Link(id domain.MachineID) *Link {
 	defer h.mu.Unlock()
 	l, ok := h.links[id]
 	if !ok {
-		l = &Link{id: id, hub: h}
+		l = &Link{id: id, hub: h, revoked: make(chan struct{})}
 		h.links[id] = l
 	}
 	return l
@@ -180,10 +180,22 @@ func (h *Hub) Kick(id domain.MachineID) {
 	l.mu.Lock()
 	l.gone = true
 	s := l.cur.Load()
+	close(l.revoked)
+	l.revoked = make(chan struct{})
 	l.mu.Unlock()
 	if s != nil {
 		s.kill()
 	}
+}
+
+// Revoked returns a channel that closes at the machine's next Kick. A holder of a long-lived op
+// for the machine, such as a box watch, ends on it: Hold alone cannot tell a revoked machine from an
+// offline one. A machine that relinks with a new key needs a fresh call.
+func (h *Hub) Revoked(id domain.MachineID) <-chan struct{} {
+	l := h.Link(id)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.revoked
 }
 
 // Drain is the server half of a deploy. Call it on SIGTERM with a ctx bounded by the drain budget.
@@ -249,9 +261,10 @@ type Link struct {
 	hub *Hub
 	cur atomic.Pointer[session] // read lock-free by every Call
 
-	mu   sync.Mutex // guards gone, and orders attach and detach
-	up   attachSignal
-	gone bool // Kick ended the link: do not wait for it to return
+	mu      sync.Mutex // guards gone and revoked, and orders attach and detach
+	up      attachSignal
+	gone    bool          // Kick ended the link: do not wait for it to return
+	revoked chan struct{} // closed and replaced by each Kick
 }
 
 // Machine is the id this link is for.

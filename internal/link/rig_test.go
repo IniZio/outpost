@@ -131,7 +131,23 @@ func TestAgentAndServerCallEachOther(t *testing.T) {
 func TestRevokeKicksALiveLink(t *testing.T) {
 	rig, _ := newRig(t, nil)
 	link1 := rig.Hub.Link(rig.Machine)
+	revoked := rig.Hub.Revoked(rig.Machine)
+	select {
+	case <-revoked:
+		t.Fatal("Revoked must stay open until a Kick")
+	default:
+	}
 	rig.Revoke(rig.Hub)
+	select {
+	case <-revoked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Revoked must close at the Kick")
+	}
+	select {
+	case <-rig.Hub.Revoked(rig.Machine):
+		t.Fatal("a Revoked taken after the Kick waits for the next one")
+	default:
+	}
 	if !linktest.Eventually(func() bool { _, ok := link1.Info(); return !ok }) {
 		t.Fatal("revoking a machine must end its live link at once")
 	}

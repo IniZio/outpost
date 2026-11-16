@@ -24,7 +24,35 @@ func agentRegistry() *link.Registry {
 	link.Handle(r, ops.Status, func(context.Context, link.Meta, struct{}) (ops.StatusResp, error) {
 		return ops.StatusResp{Build: "test", Role: domain.RoleSandbox}, nil
 	})
+	stubBoxOps(r)
 	return r
+}
+
+// stubBoxOps serves every box op with a refusal. internal/machine serves them for real.
+func stubBoxOps(r *link.Registry) {
+	refuse := link.Errorf(link.CodeRefused, "no boxes here")
+	unary := func(_ context.Context, _ link.Meta, _ ops.BoxRef) (struct{}, error) { return struct{}{}, refuse }
+	for _, op := range []link.Op[ops.BoxRef, struct{}]{ops.BoxInterrupt, ops.BoxKill, ops.BoxStop, ops.BoxRelease} {
+		link.Handle(r, op, unary)
+	}
+	link.Handle(r, ops.BoxType, func(context.Context, link.Meta, ops.TypeReq) (struct{}, error) { return struct{}{}, refuse })
+	link.Handle(r, ops.BoxObserve, func(context.Context, link.Meta, ops.BoxRef) (ops.ObserveResp, error) {
+		return ops.ObserveResp{}, refuse
+	})
+	link.Handle(r, ops.BoxInspect, func(context.Context, link.Meta, ops.BoxRef) (ops.InspectResp, error) {
+		return ops.InspectResp{}, refuse
+	})
+	link.Handle(r, ops.BoxSave, func(context.Context, link.Meta, ops.SaveReq) (ops.SaveResp, error) { return ops.SaveResp{}, refuse })
+	file := func(context.Context, link.Meta, ops.BoxPath) (ops.FileResp, error) { return ops.FileResp{}, refuse }
+	link.Handle(r, ops.BoxRead, file)
+	link.Handle(r, ops.BoxExists, file)
+	link.Handle(r, ops.BoxRemove, func(context.Context, link.Meta, ops.BoxPath) (struct{}, error) { return struct{}{}, refuse })
+	link.HandleStream(r, ops.BoxConverge, func(context.Context, link.Meta, ops.ConvergeReq) (struct{}, link.Bytes, error) {
+		return struct{}{}, nil, refuse
+	})
+	link.HandleResumable(r, ops.BoxWatch, func(context.Context, link.Meta, struct{}) (struct{}, link.Bytes, error) {
+		return struct{}{}, nil, refuse
+	})
 }
 
 func serverRegistry(lines chan<- ops.ReportLine) *link.Registry {

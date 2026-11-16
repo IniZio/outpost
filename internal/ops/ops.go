@@ -4,8 +4,8 @@
 // and call the rest. It is the single list of operations: a new op is one declaration here and one
 // handler where it is served, and nothing else to keep in step.
 //
-// Only the ops the link itself needs are here. The box, hc, sync, listen and exec operations are
-// declared in this package when internal/machine implements them.
+// The machine ops and the box ops (box.go) are here. The hc attach, sync, listen and exec
+// operations are declared in this package when their handlers are built.
 package ops
 
 import (

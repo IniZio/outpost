@@ -81,11 +81,38 @@ linters:
             - github.com/IniZio/outpost/internal/ports
             - github.com/IniZio/outpost/internal/link
             - github.com/IniZio/outpost/internal/ops
+            - github.com/IniZio/outpost/internal/hc
+        hc:
+          files: ["**/internal/hc/**"]
+          list-mode: strict
+          allow: [$gostd, github.com/IniZio/outpost/internal/hc]
+        remote:
+          files: ["**/internal/remote/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+            - github.com/IniZio/outpost/internal/link
+            - github.com/IniZio/outpost/internal/ops
+        # boxchain holds only tests: the box adapters joined end to end, so it may import them all.
+        boxchain:
+          files: ["**/internal/boxchain/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+            - github.com/IniZio/outpost/internal/link
+            - github.com/IniZio/outpost/internal/ops
+            - github.com/IniZio/outpost/internal/hc
+            - github.com/IniZio/outpost/internal/machine
+            - github.com/IniZio/outpost/internal/remote
+            - github.com/IniZio/outpost/internal/sandbox
         adapters:
           files:
             - "**/internal/sandbox/**"
             - "**/internal/agent/**"
-            - "**/internal/terminal/**"
             - "**/internal/secrets/**"
             - "**/internal/auth/**"
             - "**/internal/github/**"
@@ -140,7 +167,7 @@ linters:
       - path: internal/domain/
         linters: [forbidigo]
         text: domain\.Clock
-      - path: internal/(sandbox|agent|terminal|machine)/
+      - path: internal/(sandbox|agent|machine|boxchain)/
         linters: [forbidigo]
         text: shells out
 
