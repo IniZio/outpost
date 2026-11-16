@@ -122,7 +122,7 @@ function boxSpecFor(task: Task, user: User): dk.BoxSpec {
     ...Object.fromEntries(Object.entries(env).filter(([k]) => !AGENT_ENV.includes(k))),
   };
   if (task.proxy_secret) {
-    Object.assign(boxEnv, proxy.proxyEnv(task));
+    Object.assign(boxEnv, proxy.proxyEnv(task, user.gh_token));
     files[proxy.CA_PATH] = proxy.caPem();
   }
   const devices = withKvm(JSON.parse(getRepo(task.repo).devices));
@@ -151,7 +151,7 @@ async function start(task: Task) {
   const c = dk.names(task.id, user.login);
   const { env } = secretsOf(user);
   const agentEnv: Record<string, string> = { GH_TOKEN: user.gh_token, OUTPOST_TASK: String(task.id), OUTPOST_REPO: task.repo };
-  if (task.proxy_secret) Object.assign(agentEnv, proxy.proxyEnv(task));
+  if (task.proxy_secret) Object.assign(agentEnv, proxy.proxyEnv(task, user.gh_token), { NODE_USE_ENV_PROXY: "1" });
   for (const [k, v] of Object.entries(env)) if (AGENT_ENV.includes(k)) agentEnv[k] = v;
   if (!AGENT_ENV.some((k) => agentEnv[k])) {
     const host = await hostClaudeToken(user.login);
@@ -165,7 +165,7 @@ async function start(task: Task) {
     setStatus(task.id, "starting", { started_at: now(), image, phase: "Preparing the computer" });
     taskEvent(task.id, "phase", repo.ready_image && task.kind !== "setup" ? `Starting from ${task.repo}'s ready image` : "Starting a fresh computer");
     if (task.proxy_secret) {
-      await proxy.ensureProxy();
+      await proxy.proxyRunning();
       taskEvent(task.id, "phase", task.proxy_mode === "enforce"
         ? "GitHub writes are limited to this task's repos"
         : "GitHub writes outside this task's repos are logged (audit mode)");

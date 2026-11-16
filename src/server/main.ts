@@ -11,7 +11,7 @@ import * as gh from "./github.ts";
 import { startScheduler } from "./workflows.ts";
 import { closeTerm, openTerm, termMessage, type TermData } from "./term.ts";
 import { db, type User } from "./db.ts";
-import { ensureImages, whenImagesReady } from "./images.ts";
+import { ensureImages, imagesReady, whenImagesReady } from "./images.ts";
 import { detectLocalLogin } from "./local.ts";
 import * as proxy from "./proxy.ts";
 
@@ -65,8 +65,11 @@ dk.followDockerEvents((e) => {
   if (e.role === "box" && ["die", "oom", "start"].includes(e.action)) void tasks.onBoxEvent(e.task, e.action);
 });
 
-whenImagesReady(() => tasks.schedule());
-void ensureImages();
+const startProxy = () => proxy.ensureProxy().catch((e) => console.error(`proxy: ${e instanceof Error ? e.message : e}`));
+whenImagesReady(() => void startProxy().then(() => tasks.schedule()));
+void ensureImages().then(async () => {
+  if (imagesReady()) await startProxy();
+});
 console.log(`task network MTU ${await dk.ensureNetwork()}`);
 await detectLocalLogin();
 await tasks.recover();

@@ -68,6 +68,18 @@ v, (ids, _) = graphql_plan({"query": "mutation { addLabelsToLabelable(input:{lab
 assert ids == {"PR_1", "L_1", "L_2"}, ids
 assert graphql_plan({"query": "mutation A { addComment(input:{subjectId:\"x\", body:\"b\"}) { clientMutationId } } mutation B { addComment(input:{subjectId:\"y\", body:\"b\"}) { clientMutationId } }"})[0] == "deny"
 
+assert graphql_plan({"query": "mutation($x: ID = \"PR_other\") { closePullRequest(input:{pullRequestId:$x, clientMutationId:\"R_task\"}) { clientMutationId } }"})[0] == "deny"
+assert graphql_plan({"query": "mutation($x: ID!) { closePullRequest(input:{pullRequestId:$x}) { clientMutationId } }"})[0] == "deny"
+assert graphql_plan({"query": "mutation { closePullRequest(input:{clientMutationId:\"R_task\"}) { clientMutationId } }"})[0] == "deny"
+assert graphql_plan({"query": "mutation { mergePullRequest(input:{labelIds:[\"L\"], clientMutationId:\"x\"}) { clientMutationId } }"})[0] == "deny"
+v, (ids, _) = graphql_plan({"query": "mutation($x: ID!) { closePullRequest(input:{pullRequestId:$x, clientMutationId:\"R_task\"}) { clientMutationId } }", "variables": {"x": "PR_9"}})
+assert v == "check" and ids == {"PR_9"}, ids
+v, (ids, _) = graphql_plan({"query": "mutation { addPullRequestReviewComment(input:{pullRequestId:\"PR_1\", inReplyTo:\"C_other\", body:\"b\"}) { clientMutationId } }"})
+assert ids == {"PR_1", "C_other"}, ids
+no(decide_rest("PATCH", "api.github.com", "/repos/acme/app/", R))
+no(decide_rest("PUT", "api.github.com", "/repos/acme/app/Collaborators/eve", R))
+no(decide_rest("POST", "api.github.com", "/repos/acme/app/hooks/", R))
+
 ok(judge_nodes([{"__typename": "Repository", "nameWithOwner": "Acme/App"}], R))
 ok(judge_nodes([{"__typename": "PullRequest", "repository": {"nameWithOwner": "acme/app"}}, {"__typename": "User"}], R))
 no(judge_nodes([{"__typename": "PullRequest", "repository": {"nameWithOwner": "other/x"}}], R))

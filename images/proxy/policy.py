@@ -22,18 +22,24 @@ SENSITIVE_REST = re.compile(
     r"|/dependabot/secrets.*|/codespaces/secrets.*|/vulnerability-alerts|/automated-security-fixes|/private-vulnerability-reporting)$"
 )
 
-ALLOWED_MUTATIONS = {
-    "createPullRequest", "updatePullRequest", "closePullRequest", "mergePullRequest",
-    "markPullRequestReadyForReview", "convertPullRequestToDraft",
-    "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "updatePullRequestBranch",
-    "addPullRequestReview", "submitPullRequestReview", "addPullRequestReviewThread",
-    "addPullRequestReviewComment", "resolveReviewThread", "unresolveReviewThread",
-    "requestReviews", "requestReviewsByLogin",
-    "addComment", "updateIssueComment",
-    "addLabelsToLabelable", "removeLabelsFromLabelable",
-    "addAssigneesToAssignable", "removeAssigneesFromAssignable", "replaceActorsForAssignable",
-    "createIssue", "updateIssue", "closeIssue",
+PR = {"pullRequestId"}
+REVIEW = {"pullRequestId", "pullRequestReviewId"}
+MUTATION_TARGETS = {
+    "createPullRequest": {"repositoryId"},
+    "updatePullRequest": PR, "closePullRequest": PR, "mergePullRequest": PR,
+    "markPullRequestReadyForReview": PR, "convertPullRequestToDraft": PR,
+    "enablePullRequestAutoMerge": PR, "disablePullRequestAutoMerge": PR, "updatePullRequestBranch": PR,
+    "addPullRequestReview": PR, "submitPullRequestReview": REVIEW,
+    "addPullRequestReviewThread": REVIEW, "addPullRequestReviewComment": REVIEW,
+    "resolveReviewThread": {"threadId"}, "unresolveReviewThread": {"threadId"},
+    "requestReviews": PR, "requestReviewsByLogin": PR,
+    "addComment": {"subjectId"}, "updateIssueComment": {"id"},
+    "addLabelsToLabelable": {"labelableId"}, "removeLabelsFromLabelable": {"labelableId"},
+    "addAssigneesToAssignable": {"assignableId"}, "removeAssigneesFromAssignable": {"assignableId"},
+    "replaceActorsForAssignable": {"assignableId"},
+    "createIssue": {"repositoryId"}, "updateIssue": {"id"}, "closeIssue": {"issueId"},
 }
+ALLOWED_MUTATIONS = set(MUTATION_TARGETS)
 
 # Node types that name a person rather than a repo, such as a reviewer or assignee.
 NEUTRAL_TYPES = {"User", "Bot", "Team", "Mannequin"}
@@ -90,6 +96,7 @@ def decide_rest(method: str, host: str, path: str, repos: set[str], repo_by_id=N
             return False, f"{method} {path} is not under a repo"
         if repo not in repos:
             return False, f"{method} on {repo}, which is not one of this task's repos"
+        rest = rest.rstrip("/").lower()
         if SENSITIVE_REST.match(rest):
             return False, f"{method} {rest or '/'} changes the repo's access or settings"
         return True, f"task repo {repo}"
@@ -102,7 +109,12 @@ def info_refs_service(query: str) -> str | None:
     return m.group(1) if m else None
 
 
-ID_KEY = re.compile(r"(^id$|Id$|Ids$)")
+ID_KEY = re.compile(r"(^id$|Id$|Ids$|^inReplyTo$)")
+IGNORED_KEYS = {"clientMutationId"}
+
+
+class Refused(Exception):
+    pass
 REPO_NAME_KEY = re.compile(r"(?i)nameWithOwner$")
 
 
@@ -138,13 +150,19 @@ def graphql_plan(body: dict):
     variables = body.get("variables") or {}
     if not isinstance(variables, dict):
         return "deny", "GraphQL variables aren't an object"
+    if any(v.default_value is not None for v in op.variable_definitions or []):
+        return "deny", "GraphQL variable defaults in a mutation"
     ids: set[str] = set()
     names: set[str] = set()
+    keys_seen: set[str] = set()
 
     def take(key, value):
+        if key in IGNORED_KEYS:
+            return
         if isinstance(value, str):
             if ID_KEY.search(key):
                 ids.add(value)
+                keys_seen.add(key)
             elif REPO_NAME_KEY.search(key):
                 names.add(value)
         elif isinstance(value, list):
@@ -156,7 +174,9 @@ def graphql_plan(body: dict):
 
     def literal(key, node):
         if isinstance(node, ast.VariableNode):
-            take(key, variables.get(node.name.value))
+            if node.name.value not in variables:
+                raise Refused(f"the GraphQL variable ${node.name.value} has no value")
+            take(key, variables[node.name.value])
         elif isinstance(node, ast.StringValueNode):
             take(key, node.value)
         elif isinstance(node, ast.ListValueNode):
@@ -174,11 +194,14 @@ def graphql_plan(body: dict):
             continue
         if field not in ALLOWED_MUTATIONS:
             return "deny", f"the GraphQL mutation {field} is not allowed"
-        before = len(ids) + len(names)
-        for arg in sel.arguments or []:
-            literal(arg.name.value, arg.value)
-        if len(ids) + len(names) == before:
-            return "deny", f"{field} names no repo, pull request or issue"
+        keys_seen.clear()
+        try:
+            for arg in sel.arguments or []:
+                literal(arg.name.value, arg.value)
+        except Refused as e:
+            return "deny", str(e)
+        if not keys_seen & MUTATION_TARGETS[field]:
+            return "deny", f"{field} doesn't name its {' or '.join(sorted(MUTATION_TARGETS[field]))}"
     return "check", (ids, names)
 
 

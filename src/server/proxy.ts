@@ -46,7 +46,23 @@ async function imageId(ref: string) {
   return r.code === 0 ? r.out.trim() : null;
 }
 
-export async function ensureProxy() {
+let ensuring: Promise<void> | null = null;
+
+// Recreates the container when its image or data dir changed. Call it once at
+// startup; task starts use proxyRunning() so they never restart it under load.
+export function ensureProxy() {
+  ensuring ??= startProxy().finally(() => (ensuring = null));
+  return ensuring;
+}
+
+export async function proxyRunning() {
+  if (ensuring) await ensuring;
+  const r = await run(["docker", "inspect", "-f", "{{.State.Running}}", PROXY]);
+  if (r.out.trim() !== "true") await ensureProxy();
+  writePolicy();
+}
+
+async function startProxy() {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
   writePolicy();
@@ -71,10 +87,12 @@ export async function ensureProxy() {
 
 export const caPem = () => readFileSync(caFile, "utf8");
 
-export function proxyEnv(task: Pick<Task, "id" | "proxy_secret">, port = 8080) {
+// In audit mode the task keeps the real token, so clients that skip the proxy
+// still work; only enforce mode hands out the placeholder.
+export function proxyEnv(task: Pick<Task, "id" | "proxy_secret" | "proxy_mode">, realToken: string, port = 8080) {
   const url = `http://t${task.id}:${task.proxy_secret}@${PROXY}:${port}`;
   return {
-    GH_TOKEN: PLACEHOLDER_TOKEN,
+    GH_TOKEN: task.proxy_mode === "enforce" ? PLACEHOLDER_TOKEN : realToken,
     HTTPS_PROXY: url, HTTP_PROXY: url, https_proxy: url, http_proxy: url,
     NO_PROXY, no_proxy: NO_PROXY,
     YARN_HTTPS_PROXY: url, YARN_HTTP_PROXY: url,
