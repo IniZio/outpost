@@ -85,8 +85,10 @@ type Sandbox interface {
 	// CopyIn unpacks a tar stream into dir inside the box.
 	CopyIn(ctx context.Context, k BoxKey, dir string, tar io.Reader) error
 
-	// Commit saves the box as the template handle. Volumes and mounts are not part of it.
-	Commit(ctx context.Context, k BoxKey, handle string) error
+	// Commit saves the box as a template and returns its handle, which is the same for the same
+	// box generation, so a retried save replaces its own template. Volumes and mounts are not
+	// part of it.
+	Commit(ctx context.Context, k BoxKey) (string, error)
 
 	// Events delivers box changes until ctx ends, following the provider across its restarts.
 	// It first replays removals it can still see from before the call, as BoxDied changes with

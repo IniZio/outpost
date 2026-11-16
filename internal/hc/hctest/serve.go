@@ -2,6 +2,7 @@ package hctest
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -34,6 +35,10 @@ func (k *conn) serve() {
 		var r request
 		if json.Unmarshal(sc.Bytes(), &r) != nil {
 			return
+		}
+		if r.Method == "machine.exec" {
+			go k.reply(r.ID, k.core.execute(k.ctx, r.Params), nil)
+			continue
 		}
 		res, rerr := k.core.handle(k, r)
 		if !k.reply(r.ID, res, rerr) {
@@ -83,6 +88,7 @@ func (k *conn) writer() {
 func (k *conn) close() {
 	k.once.Do(func() {
 		close(k.done)
+		k.stop()
 		_ = k.pipe.Close()
 		k.core.mu.Lock()
 		delete(k.core.conns, k)
@@ -91,9 +97,6 @@ func (k *conn) close() {
 }
 
 func (c *Core) handle(k *conn, r request) (any, *rpcError) {
-	if r.Method == "machine.exec" {
-		return c.execute(r.Params)
-	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch r.Method {
@@ -111,13 +114,13 @@ func (c *Core) handle(k *conn, r request) (any, *rpcError) {
 	return c.onTerminal(r)
 }
 
-func (c *Core) execute(params json.RawMessage) (any, *rpcError) {
+func (c *Core) execute(ctx context.Context, params json.RawMessage) any {
 	var q hc.ExecReq
 	_ = json.Unmarshal(params, &q)
 	c.mu.Lock()
 	fn := c.exec
 	c.mu.Unlock()
-	return fn(q), nil
+	return fn(ctx, q)
 }
 
 func (c *Core) list(params json.RawMessage) any {

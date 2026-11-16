@@ -4,6 +4,7 @@
 package hctest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +23,7 @@ type Core struct {
 	terms  []*term
 	seq    uint64
 	conns  map[*conn]bool
-	exec   func(hc.ExecReq) hc.ExecResult
+	exec   func(context.Context, hc.ExecReq) hc.ExecResult
 	nconns int
 }
 
@@ -38,12 +39,14 @@ type conn struct {
 	sub   map[string]string // labels it subscribed to; nil until it subscribes
 	queue chan []byte
 	done  chan struct{}
+	ctx   context.Context
+	stop  context.CancelFunc
 	once  sync.Once
 }
 
 // New returns a core with no terminals, whose machine.exec succeeds with no output.
 func New() *Core {
-	return &Core{conns: map[*conn]bool{}, exec: func(hc.ExecReq) hc.ExecResult { return Exit(0, "") }}
+	return &Core{conns: map[*conn]bool{}, exec: func(context.Context, hc.ExecReq) hc.ExecResult { return Exit(0, "") }}
 }
 
 // Exit is an exec result with a code and stdout.
@@ -51,8 +54,9 @@ func Exit(code int, stdout string) hc.ExecResult {
 	return hc.ExecResult{Code: &code, Stdout: []byte(stdout), Stderr: []byte{}}
 }
 
-// SetExec makes machine.exec answer with fn.
-func (c *Core) SetExec(fn func(hc.ExecReq) hc.ExecResult) {
+// SetExec makes machine.exec answer with fn. Its context ends when the calling connection does,
+// as hc ends what an exec started when its caller goes away.
+func (c *Core) SetExec(fn func(context.Context, hc.ExecReq) hc.ExecResult) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.exec = fn
@@ -61,7 +65,8 @@ func (c *Core) SetExec(fn func(hc.ExecReq) hc.ExecResult) {
 // Connect is `hc connect`: a new connection to the core.
 func (c *Core) Connect() io.ReadWriteCloser {
 	ours, theirs := net.Pipe()
-	k := &conn{core: c, pipe: ours, queue: make(chan []byte, 256), done: make(chan struct{})}
+	ctx, stop := context.WithCancel(context.Background())
+	k := &conn{core: c, pipe: ours, queue: make(chan []byte, 256), done: make(chan struct{}), ctx: ctx, stop: stop}
 	c.mu.Lock()
 	c.conns[k] = true
 	c.nconns++

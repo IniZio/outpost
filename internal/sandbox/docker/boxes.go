@@ -197,9 +197,18 @@ func (d *Docker) CopyIn(ctx context.Context, k ports.BoxKey, dir string, tar io.
 	return nil
 }
 
-// Commit saves the box as the image handle without pausing it. Mounts, volumes and tmpfs are not
-// part of a commit, so neither the tools nor the task's work enter a template.
-func (d *Docker) Commit(ctx context.Context, k ports.BoxKey, handle string) error {
-	_, err := d.docker(ctx, "commit", "--no-pause", "--change", `ENTRYPOINT ["/opt/outpost/bin/box-init"]`, d.name(k), handle)
-	return err
+// Commit saves the box as <Prefix>-ready/<owner>--<repo>:t<task>-g<gen> without pausing it.
+// Mounts, volumes and tmpfs are not part of a commit, so neither the tools nor the task's work
+// enter a template.
+func (d *Docker) Commit(ctx context.Context, k ports.BoxKey) (string, error) {
+	c, err := d.inspect(ctx, d.name(k))
+	if err != nil {
+		return "", err
+	}
+	repo := strings.ToLower(strings.ReplaceAll(string(d.info(c).Repo), "/", "--"))
+	handle := fmt.Sprintf("%s-ready/%s:t%d-g%d", d.cfg.Prefix, repo, k.Task, k.Gen)
+	if _, err := d.docker(ctx, "commit", "--no-pause", "--change", `ENTRYPOINT ["/opt/outpost/bin/box-init"]`, d.name(k), handle); err != nil {
+		return "", err
+	}
+	return handle, nil
 }

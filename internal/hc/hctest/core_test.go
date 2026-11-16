@@ -196,7 +196,7 @@ func TestFakeRecordsSendsAndInterrupts(t *testing.T) {
 
 func TestFakeExecsSignalsAndStops(t *testing.T) {
 	core := hctest.New()
-	core.SetExec(func(r hc.ExecReq) hc.ExecResult { return hctest.Exit(4, strings.Join(r.Argv, " ")) })
+	core.SetExec(func(_ context.Context, r hc.ExecReq) hc.ExecResult { return hctest.Exit(4, strings.Join(r.Argv, " ")) })
 	c := hc.Dial(core.Connect())
 	x := context.Background()
 	r, err := c.Exec(x, hc.ExecReq{Argv: []string{"x", "y"}})

@@ -82,6 +82,7 @@ linters:
             - github.com/IniZio/outpost/internal/link
             - github.com/IniZio/outpost/internal/ops
             - github.com/IniZio/outpost/internal/hc
+            - github.com/IniZio/outpost/internal/machine
         hc:
           files: ["**/internal/hc/**"]
           list-mode: strict
