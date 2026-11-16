@@ -51,15 +51,22 @@ hc-golden:
 it:
 	@set -e; id=$$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n'); echo "make it: run $$id"; \
 	trap '$(MAKE) --no-print-directory it-sweep ID='"$$id" EXIT; \
-	OUTPOST_IT_ID=$$id go test -tags docker -count=1 -timeout 15m -run Docker -v ./internal/boxchain/
+	c=$$(docker run -d --label dev.outpost.it=$$id -e POSTGRES_PASSWORD=pw -p 127.0.0.1::5432 $(PG_IMAGE)); \
+	port=$$(docker port $$c 5432/tcp | head -n1 | sed 's/.*://'); \
+	timeout 60 sh -c "until docker exec $$c pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; do sleep 0.5; done"; \
+	OUTPOST_IT_ID=$$id OUTPOST_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:$$port/postgres \
+		go test -tags docker -count=1 -timeout 15m -run Docker -v ./internal/boxchain/ ./cmd/outpost/
 
 it-sweep:
 	@test -n "$(ID)"
-	@docker ps -aq --filter label=dev.outpost.box.it$(ID).task | xargs -r docker rm -f >/dev/null
-	@docker volume ls -q --filter label=dev.outpost.box.it$(ID).task | xargs -r docker volume rm -f >/dev/null
-	@docker image ls -q --filter label=dev.outpost.box.it$(ID).task | xargs -r docker image rm -f >/dev/null
+	@for l in dev.outpost.box.it$(ID) dev.outpost.box.it$(ID)e2e; do \
+		docker ps -aq --filter label=$$l.task | xargs -r docker rm -f >/dev/null; \
+		docker volume ls -q --filter label=$$l.task | xargs -r docker volume rm -f >/dev/null; \
+		docker image ls -q --filter label=$$l.task | xargs -r docker image rm -f >/dev/null; \
+	done
+	@docker ps -aq --filter label=dev.outpost.it=$(ID) | xargs -r docker rm -f -v >/dev/null
 	@docker image ls -q --filter label=dev.outpost.it=$(ID) | xargs -r docker image rm -f >/dev/null
-	@docker network rm obit-$(ID) >/dev/null 2>&1 || true
+	@docker network rm obit-$(ID) obit-$(ID)-e2e >/dev/null 2>&1 || true
 
 TOOLS_IMAGE ?= ob-tools:dev
 tools-image:
