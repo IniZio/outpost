@@ -166,6 +166,12 @@ func (b *Boxes) begin(ctx context.Context, c Call) error {
 	return err
 }
 
+func (b *Boxes) note(c Call) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.calls = append(b.calls, c)
+}
+
 func (b *Boxes) enter(c Call) {
 	select {
 	case b.entered <- c:
@@ -207,8 +213,10 @@ func (b *Boxes) Remove(ctx context.Context, t ports.Target, path string) error {
 }
 
 // Converge records the plan, reports two phases, and waits at the task's gate if held. It reports
-// a revival unless a terminal under the plan's run was already alive.
+// a revival unless a terminal under the plan's run was already alive. When it returns it records a
+// ConvergeReturned call, so a test can see that something waited for it.
 func (b *Boxes) Converge(ctx context.Context, p ports.Plan, report ports.Progress) (ports.Converged, error) {
+	defer b.note(Call{Method: "ConvergeReturned", Target: p.Target})
 	if err := b.begin(ctx, Call{Method: "Converge", Target: p.Target, Plan: p}); err != nil {
 		return ports.Converged{}, err
 	}

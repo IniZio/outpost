@@ -271,7 +271,7 @@ func TestBoxesStopInspectAndTheRest(t *testing.T) {
 	}
 	_ = b.Type(ctx, plan.Target, "hi")
 	_ = b.Interrupt(ctx, plan.Target)
-	if n := len(b.Calls()); n != 9 {
+	if n := len(b.Calls()); n != 10 {
 		t.Fatalf("%d calls recorded", n)
 	}
 }
