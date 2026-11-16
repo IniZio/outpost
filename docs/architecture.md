@@ -15,7 +15,7 @@ In moor, the agent ran inside the Box. When a build or emulator pushed the Box o
 
 Here the agent runs on the desk and reaches the box only through tools, the same split Rivet uses:
 
-- **Bash.** Claude Code passes every command line to `CLAUDE_CODE_SHELL_PREFIX`. The desk's `box-shell` spots Bash tool lines by their shell snapshot and `pwd -P >|` tail. It drops the desk's snapshot and runs the rest in the box over ssh on loopback. Hook and MCP server lines run on the desk.
+- **Bash.** Claude Code passes every command line to `CLAUDE_CODE_SHELL_PREFIX`. The desk's `box-shell` spots Bash tool lines by their shell snapshot and `pwd -P >|` tail. It drops the desk's snapshot and runs the rest in the box over ssh on loopback. Hook and MCP server lines run on the desk. So do lines that name the desk's Claude plugin folder, such as a skill's `!` command, because plugins live only on the desk.
 - **Files.** Both containers mount the task's workspace volume at `/workspace`. Claude Code's file tools work on the desk and see the same files.
 - **Temp files.** `TMPDIR` is `/run/outpost/tmp` in both containers, on a shared volume. That is how the cwd file of each Bash call comes back.
 - **Network.** The box joins the desk's network namespace, so the desk owns the network. Ports the app opens in the box are reachable from the desk, and a box restart doesn't take the desk's network down.

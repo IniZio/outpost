@@ -1,6 +1,7 @@
 #!/bin/bash
 line=$1
 case $line in
+  *"/.claude/plugins/"*) exec bash -c "$line" ;;
   *"/shell-snapshots/snapshot-"*"pwd -P >| "*) ;;
   *) exec bash -c "$line" ;;
 esac
