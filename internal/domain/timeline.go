@@ -40,3 +40,5 @@ const OOMNote = "[outpost] The kernel killed a process in your box because memor
 func BoxBackNote(why string) string {
 	return fmt.Sprintf("[outpost] Your box (the computer your commands run on) %s and was replaced with a fresh one. The workspace is intact, but processes you started there (servers, emulators, compose stacks) are gone. Restart what you need and carry on.", why)
 }
+
+const phasePreparing = "Preparing the computer"
