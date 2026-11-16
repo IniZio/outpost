@@ -111,6 +111,7 @@ linters:
             - github.com/IniZio/outpost/internal/machine
             - github.com/IniZio/outpost/internal/remote
             - github.com/IniZio/outpost/internal/sandbox
+            - github.com/IniZio/outpost/internal/boxchain
         adapters:
           files:
             - "**/internal/sandbox/**"
