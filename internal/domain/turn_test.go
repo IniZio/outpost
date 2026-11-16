@@ -217,3 +217,14 @@ func TestATimeoutBeatsANudgeDueAtTheSameInstant(t *testing.T) {
 		t.Errorf("effects = %q, want the timeout to win and the nudge to be skipped", kinds(fx))
 	}
 }
+
+func TestADuplicateEarlyReportIsDropped(t *testing.T) {
+	r := newRun(t, domain.KindInteractive, spec())
+	r.apply(domain.SlotGranted{Machine: "m1"})
+	r.apply(domain.AgentReport{Run: 1, Status: domain.HCWorking, Phase: "Editing"})
+	r.dropped(domain.AgentReport{Run: 1, Status: domain.HCWorking, Phase: "Editing"}, domain.DropNoop)
+	r.apply(domain.AgentExited{Run: 1, Code: 1})
+	r.dropped(domain.AgentExited{Run: 1, Code: 1}, domain.DropNoop)
+	r.apply(domain.AgentReport{Run: 1, Status: domain.HCIdle})
+	r.apply(domain.AgentReport{Run: 1, Status: domain.HCWorking, Phase: "Editing"})
+}

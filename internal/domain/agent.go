@@ -19,7 +19,13 @@ func (x *tx) onReport(ev AgentReport) {
 	}
 }
 
+// bufferEarly keeps an early event for replay. The same event twice in a row is a duplicate
+// delivery, so it is dropped.
 func (x *tx) bufferEarly(s Starting, e Early) {
+	if n := len(s.Early); n > 0 && s.Early[n-1].same(e) {
+		x.drop(DropNoop)
+		return
+	}
 	s.Early = append(slices.Clone(s.Early), e)
 	x.t.Life = s
 }

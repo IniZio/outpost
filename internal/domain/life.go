@@ -44,6 +44,17 @@ type Early struct {
 	Exit   *AgentExited
 }
 
+// same reports whether e buffers the same event as o.
+func (e Early) same(o Early) bool {
+	switch {
+	case e.Report != nil && o.Report != nil:
+		return *e.Report == *o.Report
+	case e.Exit != nil && o.Exit != nil:
+		return *e.Exit == *o.Exit
+	}
+	return false
+}
+
 // Event returns the buffered event.
 func (e Early) Event() Event {
 	if e.Report != nil {
