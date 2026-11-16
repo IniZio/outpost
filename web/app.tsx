@@ -5,7 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 
 type Me = { user: { login: string; name: string | null; avatar: string | null; profile_repo: string | null; mac_target: string | null; mac_pubkey: string | null } | null; setup: Setup };
 type Setup = {
-  docker: boolean; kvm: boolean; images: { box: boolean; desk: boolean }; agentKey: boolean; profile: string | null; maxRunning: number;
+  docker: boolean; kvm: boolean; images: { box: boolean; desk: boolean }; agentKey: boolean; agentKeyFromHost?: boolean; agentKeyExpiresAt?: number | null; profile: string | null; maxRunning: number;
   imageBuild: { state: "idle" | "building" | "failed" | "done"; step: string; error: string };
 };
 type Task = {
@@ -208,7 +208,10 @@ function Checklist({ setup, refreshMe }: { setup: Setup; refreshMe: () => void }
     }
   };
   const imagesOk = setup.images.box && setup.images.desk;
-  if (setup.docker && imagesOk && setup.agentKey) return null;
+  const borrowed = !!setup.agentKeyFromHost;
+  const keyDone = setup.agentKey && !borrowed;
+  if (setup.docker && imagesOk && keyDone) return null;
+  const until = setup.agentKeyExpiresAt ? new Date(setup.agentKeyExpiresAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : null;
   return (
     <div className="card checklist" style={{ marginBottom: 18 }}>
       <div style={{ fontWeight: 650, marginBottom: 10 }}>Finish setting up</div>
@@ -227,10 +230,13 @@ function Checklist({ setup, refreshMe }: { setup: Setup; refreshMe: () => void }
         </div>
       </div>
       <div className="item">
-        <div className={`check ${setup.agentKey ? "yes" : ""}`}>{setup.agentKey ? "✓" : ""}</div>
+        <div className={`check ${keyDone ? "yes" : ""}`}>{keyDone ? "✓" : ""}</div>
         <div className="grow"><b>Claude sign-in for your agents</b>
-          {setup.agentKey ? <div className="muted small">Saved.</div> : <>
-            <div className="muted small" style={{ marginBottom: 8 }}>Run <span className="kbd">claude setup-token</span> on your machine and paste the token (or an Anthropic API key). It stays with your account.</div>
+          {keyDone ? <div className="muted small">Saved.</div> : <>
+            <div className="muted small" style={{ marginBottom: 8 }}>
+              {borrowed ? <>For now your agents borrow this machine's Claude sign-in{until ? <>, which runs out {until}</> : null}. Schedules run while you're away, so give them their own: run <span className="kbd">claude setup-token</span> and paste the token here.</>
+                : <>Run <span className="kbd">claude setup-token</span> on your machine and paste the token (or an Anthropic API key). It stays with your account.</>}
+            </div>
             <div className="row"><input className="input mono grow" type="password" placeholder="sk-ant-oat01-…" value={key} onChange={(e) => setKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && key && saveKey()} /><button className="btn primary" disabled={!key} onClick={saveKey}>Save</button></div>
             {err && <div className="err">{err}</div>}
           </>}

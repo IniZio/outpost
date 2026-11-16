@@ -306,7 +306,7 @@ export async function setupState(user: User | null) {
     ? !!db.query("SELECT 1 FROM secrets WHERE user_id = ? AND name IN ('CLAUDE_CODE_OAUTH_TOKEN','ANTHROPIC_API_KEY')").get(user.id)
     : false;
   const hostKey = user && !hasAgentKey ? await hostClaudeToken(user.login) : null;
-  return { ...pre, imageBuild, agentKey: hasAgentKey || !!hostKey, agentKeyFromHost: !!hostKey, profile: user?.profile_repo ?? null, maxRunning: config.maxRunning };
+  return { ...pre, imageBuild, agentKey: hasAgentKey || !!hostKey, agentKeyFromHost: !!hostKey, agentKeyExpiresAt: hostKey?.expiresAt ?? null,profile: user?.profile_repo ?? null, maxRunning: config.maxRunning };
 }
 
 route("GET", "/api/setup", ({ user }) => setupState(user));
