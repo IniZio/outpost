@@ -1,0 +1,15 @@
+[Unit]
+Description=Outpost: agents on computers you can watch
+After=network-online.target docker.service
+
+[Service]
+WorkingDirectory=%h/magic/outpost
+ExecStart=%h/.local/share/mise/installs/bun/latest/bin/bun src/server/main.ts
+Environment=NODE_ENV=production
+EnvironmentFile=-%h/.config/outpost/env
+Restart=on-failure
+RestartSec=5
+KillMode=process
+
+[Install]
+WantedBy=default.target

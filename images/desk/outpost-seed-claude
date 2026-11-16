@@ -1,0 +1,17 @@
+#!/usr/bin/env bun
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+
+const project = process.argv[2] ?? "/workspace";
+const path = `${process.env.HOME}/.claude.json`;
+const state = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+state.hasCompletedOnboarding = true;
+state.bypassPermissionsModeAccepted = true;
+state.projects ??= {};
+state.projects[project] = { ...state.projects[project], hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true };
+writeFileSync(path, JSON.stringify(state, null, 2));
+
+mkdirSync(`${process.env.HOME}/.claude`, { recursive: true });
+const settingsPath = `${process.env.HOME}/.claude/settings.json`;
+const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) : {};
+settings.skipDangerousModePermissionPrompt = true;
+writeFileSync(settingsPath, JSON.stringify(settings, null, 2));

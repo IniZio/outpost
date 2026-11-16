@@ -1,0 +1,66 @@
+#!/usr/bin/env bun
+import { $ } from "bun";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+
+const spec = process.argv[2];
+if (!spec) throw new Error("usage: outpost-profile https://github.com/OWNER/NAME[#REF]");
+const [url, ref] = spec.split("#");
+const home = process.env.HOME!;
+const dir = `${home}/.outpost/profile`;
+const claudeDir = `${home}/.claude`;
+
+if (existsSync(`${dir}/.git`)) {
+  await $`git -C ${dir} fetch -q --depth 1 origin ${ref ?? "HEAD"}`;
+  await $`git -C ${dir} reset -q --hard FETCH_HEAD`;
+} else {
+  mkdirSync(`${home}/.outpost`, { recursive: true });
+  await $`git clone -q --depth 1 ${ref ? ["--branch", ref] : []} ${url} ${dir}`;
+}
+const head = (await $`git -C ${dir} rev-parse HEAD`.text()).trim();
+const stamp = `${home}/.outpost/profile-applied`;
+if (existsSync(stamp) && readFileSync(stamp, "utf8").trim() === head) {
+  console.log(`profile ${head.slice(0, 7)} already applied`);
+  process.exit(0);
+}
+
+mkdirSync(`${claudeDir}/skills`, { recursive: true });
+const expand = (s: string) => s.replaceAll("{home}", home).replaceAll("{profile}", dir);
+
+if (existsSync(`${dir}/AGENTS.md`)) writeFileSync(`${claudeDir}/CLAUDE.md`, readFileSync(`${dir}/AGENTS.md`, "utf8"));
+if (existsSync(`${dir}/skills`)) {
+  for (const name of readdirSync(`${dir}/skills`)) cpSync(`${dir}/skills/${name}`, `${claudeDir}/skills/${name}`, { recursive: true });
+}
+
+const settingsPath = `${claudeDir}/settings.json`;
+const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) : {};
+if (existsSync(`${dir}/claude/settings.json`)) Object.assign(settings, JSON.parse(expand(readFileSync(`${dir}/claude/settings.json`, "utf8"))));
+
+const yamlPath = ["outpost-profile.yaml", "moor-profile.yaml"].map((f) => `${dir}/${f}`).find(existsSync);
+const profile = yamlPath ? (Bun.YAML.parse(readFileSync(yamlPath, "utf8")) as { claude?: ClaudeProfile }) : {};
+type ClaudeProfile = { model?: string; env?: Record<string, string>; marketplaces?: Record<string, string>; plugins?: string[] };
+const claude = profile.claude ?? {};
+if (claude.model) settings.model = claude.model;
+if (claude.env) {
+  settings.env ??= {};
+  for (const [k, v] of Object.entries(claude.env)) {
+    if (k === "PATH" || /TOKEN|SECRET|KEY|PASSWORD/i.test(k)) continue;
+    settings.env[k] = expand(String(v));
+  }
+}
+settings.skipDangerousModePermissionPrompt = true;
+writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+if (existsSync(`${dir}/setup.sh`)) await $`sh ${dir}/setup.sh`.cwd(dir);
+
+for (const [name, src] of Object.entries(claude.marketplaces ?? {})) {
+  const r = await $`claude plugin marketplace add ${src}`.nothrow().quiet();
+  if (r.exitCode !== 0 && !/already/i.test(r.stderr.toString() + r.stdout.toString())) console.error(`marketplace ${name}: ${r.stderr}`);
+}
+await $`claude plugin marketplace update`.nothrow().quiet();
+for (const p of claude.plugins ?? []) {
+  const r = await $`claude plugin install ${p}`.nothrow().quiet();
+  if (r.exitCode !== 0) console.error(`plugin ${p}: ${r.stderr.toString().trim()}`);
+}
+
+writeFileSync(stamp, head);
+console.log(`profile ${head.slice(0, 7)} applied`);

@@ -1,0 +1,30 @@
+{
+  "name": "outpost",
+  "version": "0.1.0",
+  "description": "Hand coding tasks to agents on computers you can watch, steer and take over.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "outpost": "src/server/main.ts"
+  },
+  "scripts": {
+    "start": "bun src/server/main.ts",
+    "dev": "bun --hot src/server/main.ts",
+    "images": "docker build --network host -t outpost/box:dev images/box && docker build --network host -t outpost/desk:dev images/desk",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "croner": "9.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.12",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "typescript": "5.8.3"
+  }
+}

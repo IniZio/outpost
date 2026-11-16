@@ -1,0 +1,20 @@
+#!/bin/bash
+line=$1
+case $line in
+  *"/shell-snapshots/snapshot-"*"pwd -P >| "*) ;;
+  *) exec bash -c "$line" ;;
+esac
+
+line=$(printf '%s' "$line" | sed -E 's#^source [^ ]+/shell-snapshots/[^ ]+ 2>/dev/null \|\| true#true#')
+
+if [ ! -e /run/outpost/box-ready ]; then
+  echo "outpost: the box is starting again (it was restarted or replaced); retry in a moment." >&2
+  exit 75
+fi
+
+dir=$(pwd -P 2>/dev/null || echo /workspace)
+exec ssh -q -T -p 2222 -i /run/outpost/ssh/id \
+  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+  -o ServerAliveInterval=15 -o ConnectTimeout=10 -o LogLevel=ERROR \
+  root@127.0.0.1 \
+  "mkdir -p /run/outpost/tmp; cd $(printf '%q' "$dir") 2>/dev/null || cd /workspace; export TMPDIR=/run/outpost/tmp; exec bash -lc $(printf '%q' "$line")"
