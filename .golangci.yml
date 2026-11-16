@@ -142,7 +142,7 @@ linters:
             - github.com/IniZio/outpost/internal/ports
             - github.com/IniZio/outpost/internal/secrets
         api:
-          files: ["**/internal/api/**"]
+          files: ["**/internal/api/**", "!$test"]
           list-mode: lax
           deny: *internal
           allow:
@@ -151,6 +151,17 @@ linters:
             - github.com/IniZio/outpost/internal/schedule
             - github.com/IniZio/outpost/internal/auth
             - github.com/IniZio/outpost/internal/toolmachine
+        # The API's tests drive a real Runner over the in-memory fakes.
+        api-tests:
+          files: ["**/internal/api/**/*_test.go"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/lifecycle
+            - github.com/IniZio/outpost/internal/auth
+            - github.com/IniZio/outpost/internal/api
+            - github.com/IniZio/outpost/internal/ports
         agent-cmd:
           files: ["**/cmd/outpost-agent/**"]
           list-mode: lax

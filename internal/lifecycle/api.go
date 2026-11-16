@@ -14,6 +14,9 @@ import (
 // and domain but not ports.
 type TaskQuery = ports.TaskQuery
 
+// MachineState is ports.MachineState under lifecycle's name, for the same reason.
+type MachineState = ports.MachineState
+
 // Row is one timeline entry and its place in the task's timeline, counted from 1.
 type Row struct {
 	Seq int
