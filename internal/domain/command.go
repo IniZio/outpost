@@ -52,7 +52,7 @@ func (x *tx) onSaveTemplate(ev SaveTemplateRequested) error {
 	ask := x.newAsk()
 	x.t.Life = Closing{
 		Want: OutcomeDone, From: StatusFailed, Step: CloseTemplate, Ask: ask,
-		Until: x.now.Add(x.p.CloseGrace), Summary: e.Summary, Ensure: e.Ensure,
+		Until: x.now.Add(x.p.SaveBudget), Summary: e.Summary, Ensure: e.Ensure,
 	}
 	x.emit(SaveTemplate{Ask: ask})
 	return nil

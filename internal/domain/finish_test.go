@@ -158,7 +158,7 @@ func TestTheOwnerCanRetryAFailedTemplateSave(t *testing.T) {
 func TestARetriedTemplateSaveThatFailsAgainReturnsToFailed(t *testing.T) {
 	r := keptBox(t)
 	r.apply(domain.SaveTemplateRequested{By: owner})
-	r.advanceTo(r.policy.CloseGrace)
+	r.advanceTo(r.policy.SaveBudget)
 
 	r.want(domain.StatusFailed)
 	ended, _ := r.task.Life.(domain.Ended)
@@ -176,4 +176,19 @@ func TestOnlyAKeptSetupBoxCanRetrySaving(t *testing.T) {
 	ended.ReleasedAt = t0
 	gone.task.Life = ended
 	gone.dropped(domain.SaveTemplateRequested{By: owner}, domain.DropNoop)
+}
+
+func TestATemplateSaveGetsItsOwnBudgetBeyondTheSummaryGrace(t *testing.T) {
+	r := closingSetup(t)
+	r.apply(domain.SummaryRead{Ask: 7, Text: "Prepared."})
+	save := latest[domain.SaveTemplate](r)
+
+	r.advanceTo(r.policy.SaveBudget - time.Minute)
+	r.want(domain.StatusWorking)
+	r.advanceTo(time.Minute)
+	r.want(domain.StatusFailed)
+	if ended, _ := r.task.Life.(domain.Ended); !ended.BoxKept || !strings.Contains(ended.Error, "timed out") {
+		t.Errorf("ended = %+v, want the box kept and a timeout error", ended)
+	}
+	r.dropped(domain.TemplateSaved{Ask: save.Ask, Tag: "late"}, domain.DropStaleLife)
 }

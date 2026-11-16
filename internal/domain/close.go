@@ -71,7 +71,7 @@ func (x *tx) onCloseSummary(ev SummaryRead) {
 		x.end(c, false)
 		return
 	}
-	c.Step, c.Ask, c.Until = CloseTemplate, x.newAsk(), x.now.Add(x.p.CloseGrace)
+	c.Step, c.Ask, c.Until = CloseTemplate, x.newAsk(), x.now.Add(x.p.SaveBudget)
 	x.t.Life = c
 	x.emit(SaveTemplate{Ask: c.Ask})
 }

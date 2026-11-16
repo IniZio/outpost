@@ -5,8 +5,9 @@ import "time"
 // Policy holds every number the rules use. Callers build it once from config. Tests pass small
 // values. Nothing in the domain reads a global. A zero Timeout, IdleSleep or KeepFinished turns
 // that rule off. StallAfter is how long an unattended agent may stay pending with its box up
-// before the run treats its turn as ended. ReplaceBackoff is the wait before each retry of a failed box replacement, so its
-// length is the number of retries.
+// before the run treats its turn as ended. ReplaceBackoff is the wait before each retry of a
+// failed box replacement, so its length is the number of retries. CloseGrace bounds the summary
+// read of the finish window, StartBudget a start or wake, and SaveBudget a template save.
 type Policy struct {
 	NudgeAfter     []time.Duration
 	RealWork       time.Duration
@@ -18,6 +19,7 @@ type Policy struct {
 	BoxStartGrace  time.Duration
 	CloseGrace     time.Duration
 	StartBudget    time.Duration
+	SaveBudget     time.Duration
 	KeepFinished   time.Duration
 }
 
@@ -26,7 +28,8 @@ type Policy struct {
 // agent that has not reported a turn after 10 minutes, sleep the box after 30 idle minutes, wait
 // 4 s before replacing a lost box and retry a failed replacement after 30 s, 2 and 5 minutes, call
 // a box start more than 30 s after our own start a restart, wait 2 minutes for the summary, give
-// up on a start after 30 minutes, and keep a finished task's computer a day.
+// up on a start after 30 minutes, wait 45 for a template save and keep a finished task's computer
+// a day.
 func DefaultPolicy() Policy {
 	return Policy{
 		NudgeAfter:     []time.Duration{3 * time.Minute, 10 * time.Minute, 10 * time.Minute},
@@ -39,6 +42,7 @@ func DefaultPolicy() Policy {
 		BoxStartGrace:  30 * time.Second,
 		CloseGrace:     2 * time.Minute,
 		StartBudget:    30 * time.Minute,
+		SaveBudget:     45 * time.Minute,
 		KeepFinished:   24 * time.Hour,
 	}
 }
