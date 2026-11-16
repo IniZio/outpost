@@ -405,6 +405,15 @@ func TestRestoreRejectsCorruptRows(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsAReplacementInProgress(t *testing.T) {
+	waking := active(domain.TurnPending)
+	waking.Box = domain.Box{Want: domain.BoxWaking, Lost: "restarted"}
+	waking.Asks[domain.AskEnsure] = domain.Ask{ID: 4, Why: domain.WhyReplace}
+	if err := fixture(domain.KindInteractive, waking).Validate(); err != nil {
+		t.Errorf("Validate() = %v: the lost reason is kept until the box is back", err)
+	}
+}
+
 func TestValidateNamesEachBrokenInvariant(t *testing.T) {
 	soon := t0.Add(time.Minute)
 	withDeadline := func(k domain.DeadlineKind, turn domain.TurnState) domain.Active {

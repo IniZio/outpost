@@ -84,7 +84,7 @@ func (t Task) validateBox(a Active) rule {
 		return rule{false, "an active task's box cannot be none, stopped or released"}
 	}
 	return firstRule(
-		rule{b.Lost == "" || b.Want == BoxReplacing, "lost reason outside a replacement"},
+		rule{b.Lost == "" || b.Want == BoxReplacing || b.Want == BoxWaking, "lost reason outside a replacement"},
 		rule{len(b.Parked) == 0 || b.Want != BoxUp, "messages parked while the box is up"},
 	)
 }
