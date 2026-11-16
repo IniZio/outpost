@@ -133,14 +133,17 @@ const (
 	AskDoneMarker AskKind = iota
 	AskSummary
 	AskEnsure
+	AskInspect
 )
 
-const numAskKinds = int(AskEnsure) + 1
+const numAskKinds = int(AskInspect) + 1
 
-// Ask is one outstanding question and why it was asked. The zero Ask is an empty slot.
+// Ask is one outstanding question and why it was asked. The zero Ask is an empty slot. Code is
+// the agent's exit code on an AskInspect, kept for the failure text if the box turns out up.
 type Ask struct {
-	ID  AskID
-	Why Why
+	ID   AskID
+	Why  Why
+	Code int
 }
 
 // Why is the reason attached to a question, so the answer is handled in context. WhyTurnEnd,

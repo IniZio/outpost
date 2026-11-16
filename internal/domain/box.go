@@ -18,30 +18,37 @@ func (x *tx) onBoxEvent(ev BoxEvent) {
 	}
 }
 
+// boxEventUp judges an event about a box that is meant to be up. An agent exit waiting on the
+// box's state is settled by it: a lost box is the loss path, a box still up fails the run.
 func (x *tx) boxEventUp(a Active, ev BoxEvent) {
+	why := x.lossOf(a, ev)
 	switch {
-	case ev.Kind == BoxOOM && ev.StillRunning:
+	case why != "":
+		x.loseBox(a, why)
+	case a.Asks[AskInspect].ID != 0:
+		x.failExit(a.Asks[AskInspect].Code)
+	case ev.Kind == BoxOOM:
 		x.note(EntryWarning, "A process in the box ran out of memory and was killed. The box is still up.")
 		x.emit(SendToAgent{Text: OOMNote})
-	case ev.Kind == BoxDied && ev.StillRunning:
-		x.drop(DropNoop)
-	case ev.Kind == BoxStarted:
-		x.boxStarted(a)
-	case ev.Kind == BoxOOM || ev.OOMKilled:
-		x.loseBox(a, "ran out of memory")
 	default:
-		x.loseBox(a, "stopped unexpectedly")
+		x.drop(DropNoop)
 	}
 }
 
-// boxStarted treats a start soon after our own as its echo, and a later one as a restart that
-// took the agent down.
-func (x *tx) boxStarted(a Active) {
-	if x.now.Before(a.Box.StartedAt.Add(x.p.BoxStartGrace)) {
-		x.drop(DropNoop)
-		return
+// lossOf says why the event means the box was lost, or "" when the box is still up. A start soon
+// after our own is its echo, and a later one is a restart that took the agent down.
+func (x *tx) lossOf(a Active, ev BoxEvent) string {
+	switch {
+	case ev.Kind == BoxStarted && x.now.Before(a.Box.StartedAt.Add(x.p.BoxStartGrace)):
+		return ""
+	case ev.Kind == BoxStarted:
+		return "restarted"
+	case ev.StillRunning:
+		return ""
+	case ev.Kind == BoxOOM || ev.OOMKilled:
+		return "ran out of memory"
 	}
-	x.loseBox(a, "restarted")
+	return "stopped unexpectedly"
 }
 
 // loseBox starts the replacement of a lost box. The agent died with it, so the run and the box

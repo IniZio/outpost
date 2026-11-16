@@ -1,7 +1,5 @@
 package domain
 
-import "fmt"
-
 // onRecovered runs once per unfinished task when the server starts. Deadlines and asks were
 // persisted with the task, so the work is to re-issue what was in flight and to reconcile with
 // what the world looks like now.
@@ -33,8 +31,8 @@ func (x *tx) recoverStarting(s Starting) {
 }
 
 func (x *tx) recoverActive(a Active, obs AgentObservation) {
-	if a.Box.Want == BoxUp && (!obs.Present || obs.Finished) {
-		x.agentGone(obs)
+	if a.Box.Want == BoxUp && a.Asks[AskInspect].ID == 0 && (!obs.Present || obs.Finished) {
+		x.agentGone(a, obs)
 		return
 	}
 	if x.reissue(a) == 0 {
@@ -42,27 +40,28 @@ func (x *tx) recoverActive(a Active, obs AgentObservation) {
 	}
 }
 
-// agentGone finishes a run whose agent is not running although its box is meant to be up.
-func (x *tx) agentGone(obs AgentObservation) {
+// agentGone handles a run whose agent is not running although its box is meant to be up. A failed
+// exit is the same race as a live one, so it inspects the box too.
+func (x *tx) agentGone(a Active, obs AgentObservation) {
 	switch {
 	case !obs.Present:
 		x.close(OutcomeFailed, "The agent was lost while Outpost was down")
 	case obs.ExitCode == 0:
 		x.close(OutcomeDone, "")
 	default:
-		x.close(OutcomeFailed, fmt.Sprintf("The agent exited with code %d", obs.ExitCode))
+		x.inspect(a, obs.ExitCode)
 	}
 }
 
 // reissue emits again every effect whose answer is outstanding, and re-runs the turn-end check
-// of an unattended run that sat idle through the restart. It returns how many effects it emitted.
+// of an unattended run that sat idle through the restart, unless its agent already exited. It returns how many effects it emitted.
 func (x *tx) reissue(a Active) int {
 	for k, ask := range a.Asks {
 		if ask.ID != 0 {
 			x.emit(x.askEffect(AskKind(k), ask.ID))
 		}
 	}
-	idle := x.t.Kind.Unattended() && a.Turn.idle() && a.Asks[AskDoneMarker].ID == 0
+	idle := x.t.Kind.Unattended() && a.Turn.idle() && a.Asks[AskDoneMarker].ID == 0 && a.Asks[AskInspect].ID == 0
 	switch {
 	case idle && !a.Deadlines.Armed(DlNudge) && !a.Deadlines.Armed(DlGiveUp):
 		x.t.Life = x.armLadder(a, 0)
@@ -80,6 +79,8 @@ func (x *tx) askEffect(k AskKind, id AskID) Effect {
 		return ReadSummary{Ask: id}
 	case AskEnsure:
 		return EnsureRunning{Ask: id, Run: x.t.AgentRun, Gen: x.t.BoxGen}
+	case AskInspect:
+		return InspectBox{Ask: id, Gen: x.t.BoxGen}
 	}
 	return nil
 }

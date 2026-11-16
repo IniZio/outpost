@@ -102,6 +102,7 @@ func (t Task) validateAsks(a Active) rule {
 		rule{issued, "an ask id was never issued"},
 		rule{(a.Asks[AskEnsure].ID != 0) == (a.Box.Want == BoxWaking), "ensure ask and box want disagree"},
 		rule{a.Asks[AskDoneMarker].ID == 0 || a.Turn.idle(), "done marker ask outstanding while the agent works"},
+		rule{a.Asks[AskInspect].ID == 0 || a.Box.Want == BoxUp, "box inspect outstanding while the box is not up"},
 	)
 }
 

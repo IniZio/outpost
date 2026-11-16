@@ -11,6 +11,9 @@ func (x *tx) settle() {
 	if !a.Turn.idle() {
 		a.Asks[AskDoneMarker] = Ask{} // the agent went back to work, so a late probe answer is stale
 	}
+	if a.Box.Want != BoxUp {
+		a.Asks[AskInspect] = Ask{} // the box went down another way, which settled the exit
+	}
 	a.Deadlines = x.settled(a)
 	x.t.Life = a
 }

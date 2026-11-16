@@ -86,7 +86,7 @@ func TestARestartFinishesARunWhoseAgentIsGone(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := working(t, domain.KindInteractive)
-			res := restarted(t, r, tc.obs)
+			res := r.exitStands(restarted(t, r, tc.obs))
 			if kinds(res.Effects) != "ReadSummary" {
 				t.Fatalf("effects = %q", kinds(res.Effects))
 			}

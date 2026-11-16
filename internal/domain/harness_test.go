@@ -125,6 +125,21 @@ func (r *run) report(s domain.HCStatus, phase string) domain.Result {
 	return r.apply(domain.AgentReport{Run: r.task.AgentRun, Status: s, Phase: phase})
 }
 
+// boxStillUp answers the latest box inspect: the box is running, so the agent's exit stands.
+func (r *run) boxStillUp() domain.Result {
+	r.t.Helper()
+	return r.apply(domain.BoxInspected{Ask: latest[domain.InspectBox](r).Ask, Running: true})
+}
+
+// exitStands answers the box inspect res asked for, if any, with the box still up.
+func (r *run) exitStands(res domain.Result) domain.Result {
+	r.t.Helper()
+	if has[domain.InspectBox](res.Effects) {
+		return r.boxStillUp()
+	}
+	return res
+}
+
 // latest returns the most recent effect of type T the run produced.
 func latest[T domain.Effect](r *run) T {
 	r.t.Helper()

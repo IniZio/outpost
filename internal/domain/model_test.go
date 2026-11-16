@@ -445,6 +445,7 @@ func TestValidateNamesEachBrokenInvariant(t *testing.T) {
 		{"parked message on a live box", domain.KindInteractive, box(domain.BoxUp, func(a *domain.Active) { a.Box.Parked = []string{"x"} })},
 		{"ask never issued", domain.KindInteractive, box(domain.BoxUp, func(a *domain.Active) { a.Asks[domain.AskSummary].ID = 99 })},
 		{"waking without an ask", domain.KindInteractive, box(domain.BoxWaking, func(*domain.Active) {})},
+		{"inspecting a box that is asleep", domain.KindInteractive, box(domain.BoxAsleep, func(a *domain.Active) { a.Asks[domain.AskInspect] = domain.Ask{ID: 4, Code: 1} })},
 		{"probe outstanding while working", domain.KindScheduled, func() domain.Active {
 			a := active(domain.TurnRunning)
 			a.Turn.WorkingSince = t0

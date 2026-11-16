@@ -74,6 +74,8 @@ func (x *tx) dispatch(ev Event) error {
 		x.onDoneMarker(ev)
 	case Ensured:
 		x.onEnsured(ev)
+	case BoxInspected:
+		x.onBoxInspected(ev)
 	case Progressed:
 		x.onProgressed(ev)
 	case Started:

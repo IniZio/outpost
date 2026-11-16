@@ -22,6 +22,7 @@ func (ProbeDoneMarker) effect() {}
 func (ReadSummary) effect()     {}
 func (SaveTemplate) effect()    {}
 func (StopBox) effect()         {}
+func (InspectBox) effect()      {}
 func (Release) effect()         {}
 func (RunScheduler) effect()    {}
 
@@ -69,6 +70,15 @@ type ReadSummary struct{ Ask AskID }
 
 // SaveTemplate commits the box as the repo's ready template.
 type SaveTemplate struct{ Ask AskID }
+
+// InspectBox asks whether the box of Gen is still running, after the agent exited while its box
+// was meant to be up. It is answered by BoxInspected. The answer must describe a settled box: a
+// box caught half way through dying must not be reported as running, or the run fails when the
+// box's loss would have been recovered.
+type InspectBox struct {
+	Ask AskID
+	Gen BoxGen
+}
 
 // StopBox stops the box without deleting it.
 type StopBox struct{}

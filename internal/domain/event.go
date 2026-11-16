@@ -27,6 +27,7 @@ func (DoneMarker) event()            {}
 func (SummaryRead) event()           {}
 func (TemplateSaved) event()         {}
 func (Ensured) event()               {}
+func (BoxInspected) event()          {}
 
 // UserMessage, UserStop, UserResume and SaveTemplateRequested are commands from a person. Apply
 // refuses them with ErrForbidden unless By owns the task. A message to an ended task resumes it.
@@ -121,8 +122,9 @@ type (
 )
 
 // DoneMarker answers ProbeDoneMarker, SummaryRead answers ReadSummary, TemplateSaved answers
-// SaveTemplate and Ensured answers EnsureRunning. Each carries the AskID it answers. Apply drops
-// an answer whose Ask is not the outstanding one, which covers late, duplicate and orphaned answers.
+// SaveTemplate, Ensured answers EnsureRunning and BoxInspected answers InspectBox. Each carries
+// the AskID it answers. Apply drops an answer whose Ask is not the outstanding one, which covers
+// late, duplicate and orphaned answers.
 type (
 	DoneMarker struct {
 		Ask     AskID
@@ -141,5 +143,10 @@ type (
 		Ask     AskID
 		Revived bool
 		Err     string
+	}
+	BoxInspected struct {
+		Ask       AskID
+		Running   bool
+		OOMKilled bool
 	}
 )

@@ -152,6 +152,7 @@ func TestAnExitThatBeatsStartedEndsTheRunWhenItIsUp(t *testing.T) {
 	r.apply(domain.SlotGranted{Machine: "m1"})
 	r.apply(domain.AgentExited{Run: 1, Code: 2})
 	r.apply(domain.Started{Ask: latest[domain.StartTask](r).Ask})
+	r.boxStillUp()
 
 	r.want(domain.StatusWorking)
 	closing, ok := r.task.Life.(domain.Closing)
@@ -172,7 +173,7 @@ func TestAgentExitDecidesDoneOrFailed(t *testing.T) {
 	}
 	for _, tc := range tests {
 		r := newRun(t, domain.KindInteractive, spec()).up()
-		res := r.apply(domain.AgentExited{Run: 1, Code: tc.code})
+		res := r.exitStands(r.apply(domain.AgentExited{Run: 1, Code: tc.code}))
 		if kinds(res.Effects) != "ReadSummary" {
 			t.Errorf("exit %d: effects %q, want the summary read", tc.code, kinds(res.Effects))
 		}

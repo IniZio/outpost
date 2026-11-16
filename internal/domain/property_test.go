@@ -136,7 +136,7 @@ func (f *fuzzer) guided() domain.Event {
 func (f *fuzzer) latestAsk() domain.Effect {
 	for i := len(f.effects) - 1; i >= 0; i-- {
 		switch f.effects[i].(type) {
-		case domain.StartTask, domain.EnsureRunning, domain.ProbeDoneMarker, domain.ReadSummary, domain.SaveTemplate:
+		case domain.StartTask, domain.EnsureRunning, domain.ProbeDoneMarker, domain.ReadSummary, domain.SaveTemplate, domain.InspectBox:
 			return f.effects[i]
 		}
 	}
@@ -165,6 +165,8 @@ func (f *fuzzer) answerTo(fx domain.Effect, wrong domain.AskID) domain.Event {
 		return domain.SummaryRead{Ask: fx.Ask + wrong, Text: pick(f.rng, "", "All done.")}
 	case domain.SaveTemplate:
 		return domain.TemplateSaved{Ask: fx.Ask + wrong, Tag: "ready-1", Err: err}
+	case domain.InspectBox:
+		return domain.BoxInspected{Ask: fx.Ask + wrong, Running: flip, OOMKilled: f.rng.IntN(3) == 0}
 	}
 	return domain.Tick{}
 }

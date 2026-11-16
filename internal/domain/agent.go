@@ -82,8 +82,9 @@ func (x *tx) askMarker(a Active, why Why) Active {
 	return a
 }
 
-// onExit handles the agent's terminal ending. Exit 0 is done, anything else is failed. The agent
-// lives in the box, so an exit while the box is not up is the box's doing, not the agent's.
+// onExit handles the agent's terminal ending. Exit 0 is done. The agent lives in the box, so an
+// exit while the box is not up is the box's doing, not the agent's, and any other exit waits for
+// the box's state before it fails the run.
 func (x *tx) onExit(ev AgentExited) {
 	switch l := x.t.Life.(type) {
 	case Starting:
@@ -99,11 +100,40 @@ func (x *tx) exitActive(a Active, ev AgentExited) {
 	switch {
 	case a.Box.Want != BoxUp:
 		x.drop(DropStaleLife)
+	case a.Asks[AskInspect].ID != 0:
+		x.drop(DropNoop)
 	case ev.Code == 0:
 		x.close(OutcomeDone, "")
 	default:
-		x.close(OutcomeFailed, fmt.Sprintf("The agent exited with code %d", ev.Code))
+		x.inspect(a, ev.Code)
 	}
+}
+
+// inspect asks whether the box went down with the agent. When a box dies, hc's exit and Docker's
+// box event arrive in either order, so a failed exit is judged only once the box's state is known.
+func (x *tx) inspect(a Active, code int) {
+	ask := x.newAsk()
+	a.Asks[AskInspect] = Ask{ID: ask, Code: code}
+	x.t.Life = a
+	x.emit(InspectBox{Ask: ask, Gen: x.t.BoxGen})
+}
+
+// onBoxInspected takes the inspect's answer as the box event it stands for, so the answer and a
+// real box event resolve the exit the same way.
+func (x *tx) onBoxInspected(ev BoxInspected) {
+	a, ok := x.active()
+	switch {
+	case !ok:
+		x.drop(DropStaleLife)
+	case ev.Ask == 0 || a.Asks[AskInspect].ID != ev.Ask:
+		x.drop(DropStaleAsk)
+	default:
+		x.boxEventUp(a, BoxEvent{Gen: x.t.BoxGen, Kind: BoxDied, StillRunning: ev.Running, OOMKilled: ev.OOMKilled})
+	}
+}
+
+func (x *tx) failExit(code int) {
+	x.close(OutcomeFailed, fmt.Sprintf("The agent exited with code %d", code))
 }
 
 // onDoneMarker handles the answer to a done-marker probe. The probe is answered only while the
