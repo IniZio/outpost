@@ -481,6 +481,11 @@ export async function onBoxEvent(id: number, action: string) {
   if (!t || !["working", "waiting"].includes(t.status)) return;
   const user = userOf(t);
   const c = dk.names(id, user.login);
+  if (action === "oom" && (await dk.boxState(c))?.running) {
+    taskEvent(id, "warning", "A process in the box ran out of memory and was killed. The box is still up.");
+    await hc.send(agentAddress(id), "[outpost] The kernel killed a process in your box because memory ran out (the box limit is reached). The box is still up, but what that process was doing is gone. Check what died, restart it, and keep memory under the box limit.").catch(() => {});
+    return;
+  }
   if (action === "oom" || action === "die") {
     const st = await dk.boxState(c);
     const why = st?.oomKilled || action === "oom" ? "ran out of memory" : "stopped unexpectedly";
