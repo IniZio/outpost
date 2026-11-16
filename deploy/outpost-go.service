@@ -1,0 +1,22 @@
+# The Go server as a systemd user unit. Install:
+#   install -m 755 bin/outpost ~/.local/bin/outpost-go
+#   install -m 644 deploy/outpost-go.service ~/.config/systemd/user/
+#   install -m 600 deploy/env.example ~/.config/outpost-go/env   # then fill it in
+#   systemctl --user daemon-reload && systemctl --user enable --now outpost-go
+# Postgres and the proxy come from deploy/stack.sh. Every name here differs from the prototype's.
+[Unit]
+Description=Outpost (Go) server
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/outpost-go/env
+ExecStart=%h/.local/bin/outpost-go serve
+Restart=on-failure
+RestartSec=5
+# serve drains links and streams on SIGTERM within OUTPOST_DRAIN.
+TimeoutStopSec=90
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target

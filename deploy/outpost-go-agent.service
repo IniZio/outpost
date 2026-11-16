@@ -1,0 +1,20 @@
+# The machine agent as a systemd user unit. Pair once first:
+#   install -m 755 bin/outpost-agent ~/.local/bin/outpost-go-agent
+#   ~/.local/bin/outpost-go-agent pair http://127.0.0.1:7400 "$(hostname)" 2
+#   install -m 644 deploy/outpost-go-agent.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now outpost-go-agent
+# Boxes outlive the agent: a restart re-attaches to running ones.
+[Unit]
+Description=Outpost (Go) machine agent
+After=network-online.target docker.service outpost-go.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=-%h/.config/outpost-go/agent.env
+ExecStart=%h/.local/bin/outpost-go-agent run
+Restart=always
+RestartSec=5
+KillMode=process
+
+[Install]
+WantedBy=default.target
