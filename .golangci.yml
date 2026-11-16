@@ -96,6 +96,7 @@ linters:
             - github.com/IniZio/outpost/internal/ports
             - github.com/IniZio/outpost/internal/link
             - github.com/IniZio/outpost/internal/ops
+            - github.com/IniZio/outpost/internal/remote
         # boxchain holds only tests: the box adapters joined end to end, so it may import them all.
         boxchain:
           files: ["**/internal/boxchain/**"]
