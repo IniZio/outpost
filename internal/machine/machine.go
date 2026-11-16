@@ -29,6 +29,7 @@ const (
 	caName   = "proxy-ca.crt"
 	seedDir  = "/var/lib/outpost-seed"
 	homeMark = "/root/.outpost-seeded"
+	profMark = "/root/.outpost-profiled"
 )
 
 // Labels on hc terminals. Run lives here and not on the box, because a run moves within one box

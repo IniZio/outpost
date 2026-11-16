@@ -105,7 +105,9 @@ func (s *server) wire(ctx context.Context, key secrets.Key, clock domain.Clock) 
 	maxRun := s.cfg.MaxRunning
 	s.runner, err = lifecycle.New(lifecycle.Config{
 		Store: s.store, Boxes: boxes, Clock: clock, Policy: domain.DefaultPolicy(), BaseImage: s.cfg.BaseImage,
-		Agent:    claude.New(claude.Config{Model: s.cfg.ClaudeModel, Bin: s.cfg.ClaudeBin}),
+		Agent: claude.New(claude.Config{
+			Model: s.cfg.ClaudeModel, Bin: s.cfg.ClaudeBin, Marketplaces: s.cfg.ClaudeMarketplaces, Plugins: s.cfg.ClaudePlugins,
+		}),
 		Secrets:  creds,
 		Capacity: func() domain.Capacity { return domain.Capacity{Max: maxRun} },
 		Log:      s.log,

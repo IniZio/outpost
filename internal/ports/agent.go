@@ -19,6 +19,10 @@ type Launch struct {
 	Argv []string
 	Env  map[string]string // the agent's own placeholders, merged over Secrets' by lifecycle
 	Home []File
+	// Setup is commands run once on a fresh home, after the proxy's CA is trusted and before any
+	// clone, with the plan's env: today, installing the owner's Claude Code plugins. It is a seam
+	// that the repo and task profile work replaces.
+	Setup [][]string
 }
 
 // LaunchFor says which launch Agent.Launch builds. Prompt is set for a fresh start only; a resume

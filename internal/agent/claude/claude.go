@@ -39,6 +39,11 @@ type Config struct {
 	Model string        // --model; empty keeps Claude Code's default
 	Bin   string        // the command in the box; empty is Bin. A test points it at a fake claude
 	Poll  time.Duration // how often LastMessage looks again; default 500ms
+	// Marketplaces are plugin marketplace sources (owner/repo or a git URL) added on a fresh
+	// home, and Plugins are the plugins (name@marketplace) installed from them, with Claude Code's
+	// own plugin commands.
+	Marketplaces []string
+	Plugins      []string
 }
 
 // Agent implements ports.Agent for Claude Code.
@@ -94,8 +99,22 @@ func (a *Agent) Launch(_ context.Context, f ports.LaunchFor) (ports.Launch, erro
 			"DISABLE_AUTOUPDATER":     "1",
 			"CLAUDE_CODE_OAUTH_TOKEN": OAuthPlaceholder,
 		},
-		Home: home,
+		Home:  home,
+		Setup: a.setup(),
 	}, nil
+}
+
+// setup adds the marketplaces and installs the plugins. Both commands succeed when the thing is
+// there already.
+func (a *Agent) setup() [][]string {
+	var out [][]string
+	for _, m := range a.cfg.Marketplaces {
+		out = append(out, []string{a.cfg.Bin, "plugin", "marketplace", "add", m})
+	}
+	for _, p := range a.cfg.Plugins {
+		out = append(out, []string{a.cfg.Bin, "plugin", "install", p})
+	}
+	return out
 }
 
 // homeFiles are the files seeded into a fresh home volume. .claude.json skips onboarding and the

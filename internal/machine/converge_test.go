@@ -204,3 +204,35 @@ func TestNoCANoTrustAndAFailedTrustFailsTheConverge(t *testing.T) {
 		t.Fatalf("nothing is cloned without trust: %v", r.sb.Calls())
 	}
 }
+
+func TestTheProfileRunsOnceAfterTrustAndBeforeClones(t *testing.T) {
+	r := newRig(t, nil)
+	req := plan(ref(1, 1, 1), true)
+	req.CA = []byte("ca")
+	req.Setup = [][]string{{"claude", "plugin", "marketplace", "add", "acme/plugins"}, {"claude", "plugin", "install", "kit@acme"}}
+	phases, _, err := r.converge(req)
+	if err != nil || !slices.Contains(phases, "Applying the agent profile") {
+		t.Fatalf("%v %v", err, phases)
+	}
+	calls := r.sb.Calls()
+	trust := slices.Index(calls, "exec /opt/outpost/bin/box-trust /run/outpost/proxy-ca.crt")
+	add := slices.Index(calls, "exec claude plugin marketplace add acme/plugins")
+	install := slices.Index(calls, "exec claude plugin install kit@acme")
+	clone := slices.IndexFunc(calls, func(c string) bool { return strings.HasPrefix(c, "exec gh repo clone") })
+	if trust < 0 || add < trust || install < add || clone < install {
+		t.Fatalf("trust, then the profile in order, then clones: %v", calls)
+	}
+	r.must(plan(ref(1, 2, 1), false))
+	req.Box = ref(1, 3, 1)
+	req.Fresh = false
+	r.must(req)
+	if r.sb.Count("exec claude plugin install") != 1 {
+		t.Fatalf("the profile runs once per home: %v", r.sb.Calls())
+	}
+	r.sb.Fail("claude plugin install", "no such plugin")
+	req.Box = ref(2, 1, 1)
+	req.Fresh = true
+	if _, _, err := r.converge(req); err == nil || !strings.Contains(err.Error(), "no such plugin") {
+		t.Fatalf("a failed profile fails the converge: %v", err)
+	}
+}

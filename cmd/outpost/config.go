@@ -25,12 +25,16 @@ type config struct {
 	Allowed     []domain.Login // OUTPOST_ALLOWED_LOGINS: who may sign in with a GitHub token
 	ClaudeModel string         // OUTPOST_CLAUDE_MODEL
 	ClaudeBin   string         // OUTPOST_CLAUDE_BIN: the agent's command in the box
-	Migrate     bool           // OUTPOST_MIGRATE: migrate at start
-	ProxyURL    string         // OUTPOST_PROXY_URL: the credential proxy boxes dial; empty runs boxes with no credentials
-	ProxyCAFile string         // OUTPOST_PROXY_CA_FILE: the proxy's public CA
-	ProxyToken  string         // OUTPOST_PROXY_TOKEN: the bearer the proxy presents for grants
-	Drain       time.Duration  // OUTPOST_DRAIN: budget for the hub drain and the HTTP shutdown
-	LogLevel    slog.Level     // OUTPOST_LOG
+	// OUTPOST_CLAUDE_MARKETPLACES and OUTPOST_CLAUDE_PLUGINS: comma lists of plugin marketplace
+	// sources and plugins installed on every fresh agent home.
+	ClaudeMarketplaces []string
+	ClaudePlugins      []string
+	Migrate            bool          // OUTPOST_MIGRATE: migrate at start
+	ProxyURL           string        // OUTPOST_PROXY_URL: the credential proxy boxes dial; empty runs boxes with no credentials
+	ProxyCAFile        string        // OUTPOST_PROXY_CA_FILE: the proxy's public CA
+	ProxyToken         string        // OUTPOST_PROXY_TOKEN: the bearer the proxy presents for grants
+	Drain              time.Duration // OUTPOST_DRAIN: budget for the hub drain and the HTTP shutdown
+	LogLevel           slog.Level    // OUTPOST_LOG
 }
 
 func loadConfig(env func(string) string) (config, error) {
@@ -55,6 +59,8 @@ func loadConfig(env func(string) string) (config, error) {
 		ProxyToken:  env("OUTPOST_PROXY_TOKEN"),
 	}
 	c.Allowed = logins(env("OUTPOST_ALLOWED_LOGINS"))
+	c.ClaudeMarketplaces = list(env("OUTPOST_CLAUDE_MARKETPLACES"))
+	c.ClaudePlugins = list(env("OUTPOST_CLAUDE_PLUGINS"))
 	errs := c.parse(get)
 	if u, err := url.Parse(c.AgentURL); err != nil || u.Host == "" {
 		errs = append(errs, errors.New("OUTPOST_AGENT_URL must be a ws:// or wss:// URL"))
@@ -65,11 +71,19 @@ func loadConfig(env func(string) string) (config, error) {
 	return c, errors.Join(errs...)
 }
 
-func logins(list string) []domain.Login {
+func logins(s string) []domain.Login {
 	var out []domain.Login
-	for _, l := range strings.Split(list, ",") {
+	for _, l := range list(s) {
+		out = append(out, domain.Login(l))
+	}
+	return out
+}
+
+func list(s string) []string {
+	var out []string
+	for _, l := range strings.Split(s, ",") {
 		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, domain.Login(l))
+			out = append(out, l)
 		}
 	}
 	return out

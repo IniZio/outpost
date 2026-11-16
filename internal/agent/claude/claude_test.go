@@ -250,3 +250,22 @@ func TestLastMessageReturnsAReadError(t *testing.T) {
 		t.Fatal("want the read error")
 	}
 }
+
+func TestLaunchSetupInstallsThePlugins(t *testing.T) {
+	a := New(Config{Marketplaces: []string{"acme/plugins"}, Plugins: []string{"kit@acme", "lint@acme"}})
+	l, err := a.Launch(context.Background(), ports.LaunchFor{Target: ports.Target{Task: 1}, Prompt: "/kit go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{Bin, "plugin", "marketplace", "add", "acme/plugins"},
+		{Bin, "plugin", "install", "kit@acme"},
+		{Bin, "plugin", "install", "lint@acme"},
+	}
+	if !slices.EqualFunc(l.Setup, want, slices.Equal[[]string]) {
+		t.Fatalf("setup: %v", l.Setup)
+	}
+	if l, _ := New(Config{}).Launch(context.Background(), ports.LaunchFor{Target: ports.Target{Task: 1}}); l.Setup != nil {
+		t.Fatalf("no plugins, no setup: %v", l.Setup)
+	}
+}

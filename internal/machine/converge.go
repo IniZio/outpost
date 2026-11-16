@@ -51,6 +51,7 @@ var steps = []step{
 	{"", (*convergeRun).seed},
 	{"", (*convergeRun).seedHome},
 	{"", (*convergeRun).trust},
+	{"", (*convergeRun).profile},
 	{"", (*convergeRun).clone},
 	{"Starting the agent", (*convergeRun).agent},
 }
@@ -198,6 +199,25 @@ func (c *convergeRun) trust(ctx context.Context) error {
 		return fmt.Errorf("machine: proxy ca: %w", err)
 	}
 	return c.run(ctx, nil, boxTrust, path.Join(caDir, caName))
+}
+
+// profile runs the plan's setup commands once per home volume. It comes after trust, because the
+// commands may reach GitHub through the proxy.
+func (c *convergeRun) profile(ctx context.Context) error {
+	if len(c.req.Setup) == 0 {
+		return nil
+	}
+	done, err := c.exists(ctx, profMark)
+	if err != nil || done {
+		return err
+	}
+	c.j.add("Applying the agent profile", "")
+	for _, argv := range c.req.Setup {
+		if err := c.run(ctx, c.req.Env, argv...); err != nil {
+			return err
+		}
+	}
+	return c.run(ctx, nil, "touch", profMark)
 }
 
 // clone clones each repo not yet in the workspace into <dir>.partial and then moves it in place,

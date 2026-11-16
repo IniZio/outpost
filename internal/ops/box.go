@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,6 +47,7 @@ type ConvergeReq struct {
 	CA     []byte            `json:"ca,omitempty"`
 	Argv   []string          `json:"argv"`
 	Home   []HomeFile        `json:"home"`
+	Setup  [][]string        `json:"setup,omitempty"`
 	Budget time.Duration     `json:"budget"`
 }
 
@@ -72,12 +74,22 @@ func (r ConvergeReq) Validate() error {
 			return fmt.Errorf("bad repo %q", n)
 		}
 	}
-	for k := range r.Env {
+	if err := validEnv(r.Env); err != nil {
+		return err
+	}
+	if slices.ContainsFunc(r.Setup, func(argv []string) bool { return len(argv) == 0 }) {
+		return errors.New("a setup command is empty")
+	}
+	return validHome(r.Home)
+}
+
+func validEnv(env map[string]string) error {
+	for k := range env {
 		if !envName.MatchString(k) {
 			return fmt.Errorf("bad env name %q", k)
 		}
 	}
-	return validHome(r.Home)
+	return nil
 }
 
 func validHome(files []HomeFile) error {
