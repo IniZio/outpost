@@ -62,6 +62,8 @@ func (x *tx) dispatch(ev Event) error {
 		x.onSlotGranted(ev)
 	case Tick:
 		x.onTick()
+	case Recovered:
+		x.onRecovered(ev)
 	case AgentReport:
 		x.onReport(ev)
 	case AgentExited:
