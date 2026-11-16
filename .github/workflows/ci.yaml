@@ -35,8 +35,67 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: tools/go.sum
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.19.5
       - uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b
       - run: make --no-print-directory ci TYPOS=true
         env:
           OUTPOST_TEST_DATABASE_URL: postgres://postgres:pw@127.0.0.1:5432/postgres
       - run: make --no-print-directory proxy-image
+
+  publish:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/go'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: 0.0.0-go.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/inizio/outpost:${{ env.VERSION }}
+            ghcr.io/inizio/outpost:sha-${{ github.sha }}
+          build-args: |
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: images/proxy
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/inizio/outpost-proxy:${{ env.VERSION }}
+            ghcr.io/inizio/outpost-proxy:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=proxy
+          cache-to: type=gha,mode=max,scope=proxy
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.19.5
+      - name: Push the chart at the same version
+        env:
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm package deploy/helm/outpost --version "$VERSION" --app-version "$VERSION" --destination "$RUNNER_TEMP/chart"
+          helm push "$RUNNER_TEMP/chart/outpost-$VERSION.tgz" oci://ghcr.io/inizio/charts
