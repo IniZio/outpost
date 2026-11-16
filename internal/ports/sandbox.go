@@ -51,11 +51,24 @@ var (
 	ErrNoImage = errors.New("sandbox: the image is not on this machine")
 )
 
+// ExecReq is one command run to its end in a box, with env added to the box's own.
+type ExecReq struct {
+	Argv []string
+	Env  map[string]string
+}
+
+// ExecResult is how a command ended: its exit code and the tail of its stdout and stderr together.
+type ExecResult struct {
+	Code   int
+	Output []byte
+}
+
 // Sandbox is one box provider: privileged Docker today, Incus VMs later. It makes "a box of this
-// generation exists and runs, with the task's volumes" true and reports box-level facts. Everything
-// inside the box (hc, clones, home files, the agent terminal) goes through hc over Dial, so it is
-// the same for every provider. Only internal/machine consumes it, and it serializes the shape calls
-// (Up, Stop, Release, Commit) for one task, so a provider need not lock.
+// generation exists and runs, with the task's volumes" true and reports box-level facts. Inside the
+// box, the agent terminal and quick checks go through hc over Dial, and the converge and save
+// steps go through Exec, which has no time limit of its own. Only internal/machine consumes it,
+// and it serializes the shape calls (Up, Stop, Release, Commit) for one task, so a provider need
+// not lock.
 //
 // Every method is idempotent.
 type Sandbox interface {
@@ -81,6 +94,11 @@ type Sandbox interface {
 	// Dial runs argv in the running box and returns its stdin and stdout as one stream. Closing
 	// the stream ends the process.
 	Dial(ctx context.Context, k BoxKey, argv []string) (io.ReadWriteCloser, error)
+
+	// Exec runs r in the running box to its end. It has no time limit: the end of ctx ends the
+	// command and everything it started, and so does the death of the caller's process, so a step
+	// cut short never races its own retry. A non-zero exit is a result, not an error.
+	Exec(ctx context.Context, k BoxKey, r ExecReq) (ExecResult, error)
 
 	// CopyIn unpacks a tar stream into dir inside the box.
 	CopyIn(ctx context.Context, k BoxKey, dir string, tar io.Reader) error

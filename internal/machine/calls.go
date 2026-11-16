@@ -205,12 +205,7 @@ func (m *Machine) save(ctx context.Context, _ link.Meta, q ops.SaveReq) (ops.Sav
 // runSave copies the workspace and the inner images onto the box's own disk, because volumes are
 // not part of a commit, commits, and removes the copy whatever happened.
 func (m *Machine) runSave(ctx context.Context, k ports.BoxKey) (string, error) {
-	c, err := m.dial(ctx, k)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = c.Close() }()
-	cr := &convergeRun{m: m, hc: c}
+	cr := &convergeRun{m: m, key: k}
 	defer func() {
 		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
 		defer cancel()

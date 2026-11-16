@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -177,16 +179,45 @@ func (d *Docker) Release(ctx context.Context, task domain.TaskID) error {
 	return nil
 }
 
-// Dial runs argv in the running box with its stdin and stdout as one stream.
-func (d *Docker) Dial(ctx context.Context, k ports.BoxKey, argv []string) (io.ReadWriteCloser, error) {
+func (d *Docker) running(ctx context.Context, k ports.BoxKey) error {
 	c, err := d.inspect(ctx, d.name(k))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !c.State.Running {
-		return nil, fmt.Errorf("docker: %s is %s: %w", d.name(k), c.State.Status, ports.ErrNoBox)
+		return fmt.Errorf("docker: %s is %s: %w", d.name(k), c.State.Status, ports.ErrNoBox)
+	}
+	return nil
+}
+
+// Dial runs argv in the running box with its stdin and stdout as one stream.
+func (d *Docker) Dial(ctx context.Context, k ports.BoxKey, argv []string) (io.ReadWriteCloser, error) {
+	if err := d.running(ctx, k); err != nil {
+		return nil, err
 	}
 	return d.cfg.Run.Start(ctx, append([]string{"exec", "-i", d.name(k)}, argv...)...) //nolint:wrapcheck // CmdError names it
+}
+
+// StepBin runs a step in the box and ends it, with everything it started, when its stdin closes.
+// A killed docker exec client leaves its command running in the container, but it does close the
+// command's stdin.
+const StepBin = "/opt/outpost/bin/box-step"
+
+// Exec runs r through box-step. The env values reach docker through its own environment and only
+// their names through argv, so they never show in the host's process list.
+func (d *Docker) Exec(ctx context.Context, k ports.BoxKey, r ports.ExecReq) (ports.ExecResult, error) {
+	if err := d.running(ctx, k); err != nil {
+		return ports.ExecResult{}, err
+	}
+	args := []string{"exec", "-i"}
+	env := make([]string, 0, len(r.Env))
+	for _, name := range slices.Sorted(maps.Keys(r.Env)) {
+		args = append(args, "-e", name)
+		env = append(env, name+"="+r.Env[name])
+	}
+	args = append(append(args, d.name(k), StepBin), r.Argv...)
+	code, out, err := d.cfg.Run.Step(ctx, env, args...)
+	return ports.ExecResult{Code: code, Output: out}, err //nolint:wrapcheck // Step wraps
 }
 
 // CopyIn unpacks a tar stream into dir inside the box.

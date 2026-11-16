@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/hc"
@@ -42,6 +43,8 @@ type Sandbox struct {
 	holds   map[string]chan struct{}
 	fails   map[string]string
 	entered chan string
+	hcClock domain.Clock
+	hcLimit time.Duration
 }
 
 // New returns a sandbox with no boxes.

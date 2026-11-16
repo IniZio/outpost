@@ -324,3 +324,30 @@ func mustExist(t *testing.T, rp portstest.BoxesRig, tg ports.Target, want map[st
 		}
 	}
 }
+
+func TestDockerStepEndsWithItsCaller(t *testing.T) {
+	w := newWorld(t)
+	k := ports.BoxKey{Task: 9, Gen: 1}
+	if _, err := w.sb.Up(ctx(t), ports.BoxSpec{Key: k, Image: w.box, Repo: "acme/app", Fresh: true}, func(string, string) {}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = w.sb.Release(context.Background(), k.Task) })
+	res, err := w.sb.Exec(ctx(t), k, ports.ExecReq{Argv: []string{"sh", "-c", `echo "$SECRET"; exit 3`}, Env: map[string]string{"SECRET": "s3"}})
+	if err != nil || res.Code != 3 || strings.TrimSpace(string(res.Output)) != "s3" {
+		t.Fatalf("a finished step: %+v %v", res, err)
+	}
+	c, cancel := context.WithCancel(ctx(t))
+	time.AfterFunc(2*time.Second, cancel)
+	if _, err := w.sb.Exec(c, k, ports.ExecReq{Argv: []string{"sh", "-c", "sleep 301 & sleep 302"}}); err == nil {
+		t.Fatal("a cancelled step reported success")
+	}
+	name := fmt.Sprintf("obit-%s-t%d-g%d", w.id, k.Task, k.Gen)
+	ps := ""
+	for range 75 {
+		if ps = run(t, "exec", name, "sh", "-c", `cat /proc/[0-9]*/cmdline | tr '\0' ' '`); !strings.Contains(ps, "sleep 30") {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("the step outlived its caller: %s", ps)
+}

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -80,10 +81,13 @@ func New(cfg Config) (*Docker, error) {
 }
 
 // Runner runs the docker CLI. Output runs it to its end. Start runs it with its stdin and stdout
-// as one stream, and Close on the stream ends it.
+// as one stream, and Close on the stream ends it. Step runs it to its end with env added to its
+// own, holding its stdin open the whole time, and returns its exit code and the tail of its stdout
+// and stderr.
 type Runner interface {
 	Output(ctx context.Context, stdin io.Reader, args ...string) ([]byte, error)
 	Start(ctx context.Context, args ...string) (io.ReadWriteCloser, error)
+	Step(ctx context.Context, env []string, args ...string) (int, []byte, error)
 }
 
 // CmdError is a docker command that failed, with what it wrote to stderr.
@@ -141,6 +145,53 @@ func (c CLI) Start(ctx context.Context, args ...string) (io.ReadWriteCloser, err
 		return nil, fmt.Errorf("docker: %w", err)
 	}
 	return &proc{cmd: cmd, in: in, out: out}, nil
+}
+
+// Step runs docker to its end. Its stdin stays open until docker exits, because box-step ends the
+// command in the box when stdin closes, which is also what happens when this process dies.
+func (c CLI) Step(ctx context.Context, env []string, args ...string) (int, []byte, error) {
+	cmd := exec.CommandContext(ctx, c.Binary, args...) //nolint:gosec // argv is built by this package, never a shell
+	cmd.Env = append(os.Environ(), env...)
+	if _, err := cmd.StdinPipe(); err != nil {
+		return 0, nil, fmt.Errorf("docker: %w", err)
+	}
+	out := &tailBuffer{max: stepTail}
+	cmd.Stdout, cmd.Stderr = out, out
+	err := cmd.Run()
+	var ee *exec.ExitError
+	switch {
+	case ctx.Err() != nil:
+		return 0, out.bytes(), fmt.Errorf("docker: %w", ctx.Err())
+	case errors.As(err, &ee):
+		return ee.ExitCode(), out.bytes(), nil
+	case err != nil:
+		return 0, nil, fmt.Errorf("docker: %w", err)
+	}
+	return 0, out.bytes(), nil
+}
+
+// stepTail is how much of a step's output Step keeps.
+const stepTail = 64 << 10
+
+// tailBuffer keeps the last max bytes written to it.
+type tailBuffer struct {
+	max int
+	b   []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.b = append(t.b, p...)
+	if len(t.b) > 2*t.max {
+		t.b = append(t.b[:0], t.b[len(t.b)-t.max:]...)
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) bytes() []byte {
+	if len(t.b) > t.max {
+		return t.b[len(t.b)-t.max:]
+	}
+	return t.b
 }
 
 type proc struct {

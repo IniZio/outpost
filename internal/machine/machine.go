@@ -103,18 +103,6 @@ func (m *Machine) dial(ctx context.Context, k ports.BoxKey) (*hc.Conn, error) {
 	return c, nil
 }
 
-// deadline is the seconds left before ctx's deadline, for hc's exec timeout, at most hc's limit. Zero is
-// none.
-func (m *Machine) deadline(ctx context.Context) float64 {
-	if dl, ok := ctx.Deadline(); ok {
-		return min(max(dl.Sub(m.cfg.Clock.Now()).Seconds(), 1), maxExec)
-	}
-	return 0
-}
-
-// maxExec is the longest timeout hc's machine.exec accepts, in seconds.
-const maxExec = 600
-
 func superseded(why string) error { return link.Errorf(link.CodeRefused, "superseded: %s", why) }
 
 // wire turns a provider or machine error into the code the server sees.

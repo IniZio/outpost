@@ -89,15 +89,17 @@ func (c *convergeRun) connect(ctx context.Context) error {
 	return err
 }
 
-// run executes argv in the box through hc, with the oom reset in front, and fails on a non-zero
-// exit. Cancelling ctx ends the program: hc ends what an exec started when its caller goes away.
+// run executes a step in the box through the provider, with the oom reset in front, and fails on a
+// non-zero exit. It does not go through hc, whose exec refuses timeouts over ten minutes: a clone,
+// a seed or a save of a big repo takes longer, and only the job's budget bounds it. Cancelling ctx
+// ends the step.
 func (c *convergeRun) run(ctx context.Context, env map[string]string, argv ...string) error {
-	r, err := c.hc.Exec(ctx, hc.ExecReq{Argv: append([]string{oomReset}, argv...), Env: env, Timeout: c.m.deadline(ctx)})
+	r, err := c.m.cfg.Sandbox.Exec(ctx, c.key, ports.ExecReq{Argv: append([]string{oomReset}, argv...), Env: env})
 	if err != nil {
 		return fmt.Errorf("machine: %s: %w", argv[0], err)
 	}
-	if !r.OK() {
-		return fmt.Errorf("machine: %s failed: %s", strings.Join(argv, " "), tail(string(r.Stderr)+string(r.Stdout), 600))
+	if r.Code != 0 {
+		return fmt.Errorf("machine: %s failed: %s", strings.Join(argv, " "), tail(string(r.Output), 600))
 	}
 	return nil
 }

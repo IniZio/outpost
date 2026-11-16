@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/hc"
@@ -74,8 +75,55 @@ func (s *Sandbox) start(spec ports.BoxSpec) (*Box, bool) {
 	}
 	b.Info.Running, b.Info.OOMKilled = true, false
 	b.Core = hctest.New()
-	b.Core.SetExec(func(ctx context.Context, r hc.ExecReq) hc.ExecResult { return s.exec(ctx, b, r) })
+	b.Core.SetExec(func(ctx context.Context, r hc.ExecReq) hc.ExecResult { return s.hcExec(ctx, b, r) })
 	return b, true
+}
+
+// hcExec is hc's machine.exec, which refuses a timeout over hc's limit and cuts a command that runs
+// past it, as the real hc does.
+func (s *Sandbox) hcExec(ctx context.Context, b *Box, r hc.ExecReq) hc.ExecResult {
+	s.mu.Lock()
+	clock, limit := s.hcClock, s.hcLimit
+	s.mu.Unlock()
+	if limit == 0 {
+		return s.exec(ctx, b, r)
+	}
+	if r.Timeout > limit.Seconds() {
+		return execResult(2, "", "timeout over hc's limit")
+	}
+	start := clock.Now()
+	res := s.exec(ctx, b, r)
+	if clock.Now().Sub(start) > limit {
+		return hc.ExecResult{TimedOut: true, Stderr: []byte("timed out")}
+	}
+	return res
+}
+
+// LimitHC makes hc's machine.exec time out commands that run longer than limit on clock.
+func (s *Sandbox) LimitHC(clock domain.Clock, limit time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hcClock, s.hcLimit = clock, limit
+}
+
+// Exec answers a step the machine runs through the provider. It has no time limit.
+func (s *Sandbox) Exec(ctx context.Context, k ports.BoxKey, r ports.ExecReq) (ports.ExecResult, error) {
+	s.mu.Lock()
+	b := s.boxes[k]
+	running := b != nil && b.Info.Running
+	s.mu.Unlock()
+	if !running {
+		return ports.ExecResult{}, errNoBox
+	}
+	res := s.exec(ctx, b, hc.ExecReq{Argv: r.Argv, Env: r.Env})
+	if ctx.Err() != nil {
+		return ports.ExecResult{}, fmt.Errorf("machinetest: %w", ctx.Err())
+	}
+	code := -1
+	if res.Code != nil {
+		code = *res.Code
+	}
+	return ports.ExecResult{Code: code, Output: append(res.Stderr, res.Stdout...)}, nil
 }
 
 // Boxes lists every box.

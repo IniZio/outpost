@@ -21,6 +21,7 @@ type host struct {
 	calls  []string
 	answer func(cmd string) (string, error)
 	stream string
+	env    []string
 }
 
 func missing(what string) error {
@@ -43,6 +44,14 @@ func (h *host) Start(_ context.Context, args ...string) (io.ReadWriteCloser, err
 	h.stream = ""
 	h.mu.Unlock()
 	return rwc{strings.NewReader(s)}, nil
+}
+
+func (h *host) Step(_ context.Context, env []string, args ...string) (int, []byte, error) {
+	h.mu.Lock()
+	h.calls = append(h.calls, strings.Join(args, " "))
+	h.env = append(h.env, env...)
+	h.mu.Unlock()
+	return 3, []byte("tail"), nil
 }
 
 type rwc struct{ io.Reader }
@@ -328,5 +337,31 @@ func TestAMissingNetworkIsCreated(t *testing.T) {
 	_, _ = provider(t, h).Up(context.Background(), spec(1, true), nil)
 	if len(h.ran("network create")) != 1 || len(h.ran("network rm")) != 0 {
 		t.Fatalf("%v", h.calls)
+	}
+}
+
+func TestExecPassesEnvNamesOnlyThroughArgv(t *testing.T) {
+	h := &host{answer: world(map[string]string{"2": "running"}, true)}
+	d := provider(t, h)
+	res, err := d.Exec(context.Background(), ports.BoxKey{Task: 5, Gen: 2}, ports.ExecReq{Argv: []string{"gh", "repo", "clone"}, Env: map[string]string{"TOKEN": "secret", "A": "1"}})
+	if err != nil || res.Code != 3 || string(res.Output) != "tail" {
+		t.Fatalf("exec: %+v %v", res, err)
+	}
+	got := h.ran("exec -i")
+	if len(got) != 1 || got[0] != "exec -i -e A -e TOKEN ob-t5-g2 "+StepBin+" gh repo clone" || strings.Contains(got[0], "secret") {
+		t.Fatalf("argv: %v", got)
+	}
+	if !slices.Equal(h.env, []string{"A=1", "TOKEN=secret"}) {
+		t.Fatalf("env: %v", h.env)
+	}
+}
+
+func TestTailBufferKeepsTheEnd(t *testing.T) {
+	b := &tailBuffer{max: 4}
+	for _, s := range []string{"abc", "defgh", "ij"} {
+		_, _ = b.Write([]byte(s))
+	}
+	if got := string(b.bytes()); got != "ghij" {
+		t.Fatalf("tail: %q", got)
 	}
 }
