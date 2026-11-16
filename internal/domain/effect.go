@@ -37,10 +37,12 @@ type StartTask struct {
 // AbortStart cancels a StartTask in flight. Its late answers are dropped by Apply.
 type AbortStart struct{}
 
-// EnsureRunning is idempotent for the box: it starts the box if it is down. It always leaves one
-// agent terminal running under Run, launching the agent with its own resume and replacing a
-// terminal still alive under an older run. Ensured.Revived is false only when a terminal of Run
-// was already alive, as when the same ask is retried.
+// EnsureRunning is idempotent. It leaves a box labelled Gen running, replacing a lost box of an
+// older generation with a new container, and one agent terminal running under Run, launched with
+// the agent's own resume and replacing a terminal still alive under an older run. The workspace
+// and the agent's home live on volumes outside the box, so a replacement loses no work. Labelling
+// matters: the domain drops box and agent events that carry an older Gen or Run. Ensured.Revived
+// is false only when a terminal of Run was already alive, as when the same ask is retried.
 type EnsureRunning struct {
 	Ask AskID
 	Run AgentRun

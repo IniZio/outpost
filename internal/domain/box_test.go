@@ -66,6 +66,20 @@ func TestTheReplacementBoxIsStartedAndTheAgentResumes(t *testing.T) {
 	}
 }
 
+func TestTheReplacementBoxCarriesTheNewGenerationSoItsOwnLossCounts(t *testing.T) {
+	r := working(t, domain.KindScheduled)
+	r.apply(domain.BoxEvent{Gen: 1, Kind: domain.BoxOOM, OOMKilled: true})
+	r.advanceTo(r.policy.ReplaceDelay)
+	r.apply(domain.Ensured{Ask: latest[domain.EnsureRunning](r).Ask, Revived: true})
+	r.advance(time.Minute)
+
+	r.dropped(domain.BoxEvent{Gen: 1, Kind: domain.BoxOOM, OOMKilled: true}, domain.DropStaleKey)
+	r.apply(domain.BoxEvent{Gen: 2, Kind: domain.BoxOOM, OOMKilled: true})
+	if r.task.BoxWant() != domain.BoxReplacing || r.task.BoxGen != 3 || r.task.AgentRun != 3 {
+		t.Errorf("box want %v, gen %d, run %d: the second box's loss must be replaced too", r.task.BoxWant(), r.task.BoxGen, r.task.AgentRun)
+	}
+}
+
 func TestAProcessOOMWithTheBoxUpOnlyWarns(t *testing.T) {
 	r := working(t, domain.KindScheduled)
 	before := r.task
