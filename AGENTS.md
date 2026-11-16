@@ -60,4 +60,4 @@ depguard enforces this table. Other rules:
 
 ## Deploy
 
-`deploy/` holds the one-host deploy: systemd user units for `outpost-go serve` and `outpost-go-agent run`, `stack.sh` for Postgres (`ob-pg`) and the credential proxy (`ob-proxy`), and `env.example`, which lists every `OUTPOST_*` setting. A test fails when the code reads a setting the template does not list. Names and ports stay apart from the prototype's (port 7300, the `outpost` network, `outpost-proxy`).
+`deploy/README.md` covers the cluster deploy (Helm chart in `deploy/helm/outpost`, images published by CI). `deploy/` also holds the one-host deploy: systemd user units for `outpost-go serve` and `outpost-go-agent run`, `stack.sh` for Postgres (`ob-pg`) and the credential proxy (`ob-proxy`), and `env.example`, which lists every `OUTPOST_*` setting. A test fails when the code reads a setting the template does not list. Names and ports stay apart from the prototype's (port 7300, the `outpost` network, `outpost-proxy`).
