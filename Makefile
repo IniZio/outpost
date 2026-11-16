@@ -1,4 +1,4 @@
-GO_VERSION := 1.26.8
+GO_VERSION := 1.26.11
 TYPOS_VERSION := 1.51.1
 
 export GOTOOLCHAIN := local

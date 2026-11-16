@@ -5,7 +5,7 @@ Outpost runs coding agents on computers you can watch. This branch is the Go rew
 ## Run and check
 
 ```sh
-mise install        # Go 1.26.8, from mise.toml
+mise install        # Go 1.26.11, from mise.toml
 make setup          # pinned tools and the pre-push hook
 make ci             # lint, audit, test, build
 ```
