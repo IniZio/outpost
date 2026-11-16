@@ -317,3 +317,16 @@ func TestNetworkIsRecreatedForANewMTU(t *testing.T) {
 		t.Fatalf("%v", h.calls)
 	}
 }
+
+func TestAMissingNetworkIsCreated(t *testing.T) {
+	h := &host{answer: func(cmd string) (string, error) {
+		if strings.HasPrefix(cmd, "network inspect") {
+			return "", &CmdError{Code: 1, Stderr: "Error response from daemon: network outpost-boxes not found"}
+		}
+		return world(nil, true)(cmd)
+	}}
+	_, _ = provider(t, h).Up(context.Background(), spec(1, true), nil)
+	if len(h.ran("network create")) != 1 || len(h.ran("network rm")) != 0 {
+		t.Fatalf("%v", h.calls)
+	}
+}

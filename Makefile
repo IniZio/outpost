@@ -7,10 +7,10 @@ TYPOS ?= typos
 
 PG_IMAGE := postgres:17
 
-.PHONY: help setup lint audit test test-pg ci build hc-golden
+.PHONY: help setup lint audit test test-pg ci build hc-golden it it-sweep tools-image
 
 help:
-	@echo "targets: setup lint audit test test-pg ci build hc-golden"
+	@echo "targets: setup lint audit test test-pg ci build hc-golden it tools-image"
 
 setup:
 	@go version | grep -q 'go$(GO_VERSION) ' || { echo "setup: need Go $(GO_VERSION) (mise install)"; exit 1; }
@@ -47,6 +47,26 @@ test-pg:
 # hc-golden records the real hc's answers into internal/hc/testdata. Run it after an hc upgrade.
 hc-golden:
 	go test -tags hcgolden -run TestRecordTranscripts -count=1 ./internal/hc/
+
+it:
+	@set -e; id=$$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n'); echo "make it: run $$id"; \
+	trap '$(MAKE) --no-print-directory it-sweep ID='"$$id" EXIT; \
+	OUTPOST_IT_ID=$$id go test -tags docker -count=1 -timeout 15m -run Docker -v ./internal/boxchain/
+
+it-sweep:
+	@test -n "$(ID)"
+	@docker ps -aq --filter label=dev.outpost.box.it$(ID).task | xargs -r docker rm -f >/dev/null
+	@docker volume ls -q --filter label=dev.outpost.box.it$(ID).task | xargs -r docker volume rm -f >/dev/null
+	@docker image ls -q --filter label=dev.outpost.box.it$(ID).task | xargs -r docker image rm -f >/dev/null
+	@docker image ls -q --filter label=dev.outpost.it=$(ID) | xargs -r docker image rm -f >/dev/null
+	@docker network rm obit-$(ID) >/dev/null 2>&1 || true
+
+TOOLS_IMAGE ?= ob-tools:dev
+tools-image:
+	mkdir -p bin/tools-image
+	cp images/tools/* bin/tools-image/
+	cp -L "$$(command -v hc)" bin/tools-image/hc
+	docker build -t $(TOOLS_IMAGE) bin/tools-image
 
 ci: lint audit test build
 

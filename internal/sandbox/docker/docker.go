@@ -97,10 +97,15 @@ func (e *CmdError) Error() string {
 	return fmt.Sprintf("docker %s: exit %d: %s", strings.Join(e.Args, " "), e.Code, strings.TrimSpace(e.Stderr))
 }
 
-// notFound reports whether err is docker saying the object does not exist.
+// notFound reports whether err is docker saying the object does not exist. Containers, images
+// and volumes say "no such", networks say "not found".
 func notFound(err error) bool {
 	var ce *CmdError
-	return errors.As(err, &ce) && strings.Contains(strings.ToLower(ce.Stderr), "no such")
+	if !errors.As(err, &ce) {
+		return false
+	}
+	msg := strings.ToLower(ce.Stderr)
+	return strings.Contains(msg, "no such") || strings.Contains(msg, "not found")
 }
 
 // CLI runs a docker binary.

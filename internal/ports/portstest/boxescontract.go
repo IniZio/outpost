@@ -21,6 +21,8 @@ type BoxesRig struct {
 	Report func(t ports.Target, s domain.HCStatus)
 	// Touch creates a file in the task's box.
 	Touch func(t ports.Target, path string)
+	// Image is the box image plans name, or "" for a placeholder the fake accepts.
+	Image string
 }
 
 // BoxesRigFor wraps the in-memory Boxes.
@@ -64,16 +66,20 @@ func target(r BoxesRig, task domain.TaskID, run domain.AgentRun, gen domain.BoxG
 	return ports.Target{Task: task, Machine: r.Machine, Run: run, Gen: gen}
 }
 
-func boxPlan(tg ports.Target, fresh bool) ports.Plan {
+func boxPlan(r BoxesRig, tg ports.Target, fresh bool) ports.Plan {
+	image := r.Image
+	if image == "" {
+		image = "ob-base:1"
+	}
 	return ports.Plan{
-		Target: tg, Image: "ob-base:1", Fresh: fresh, Repos: []domain.RepoName{"o/main"},
+		Target: tg, Image: image, Fresh: fresh, Repos: []domain.RepoName{"o/main"},
 		Env: map[string]string{"GH_TOKEN": "placeholder"}, Launch: ports.Launch{Argv: []string{"agent"}},
 	}
 }
 
 func converge(t *testing.T, r BoxesRig, tg ports.Target, fresh bool) ports.Converged {
 	t.Helper()
-	got, err := r.Boxes.Converge(boxesCtx(t), boxPlan(tg, fresh), nil)
+	got, err := r.Boxes.Converge(boxesCtx(t), boxPlan(r, tg, fresh), nil)
 	if err != nil {
 		t.Fatalf("converge %+v: %v", tg, err)
 	}
@@ -92,7 +98,7 @@ func running(t *testing.T, r BoxesRig, tg ports.Target) bool {
 func boxesConvergeOnce(t *testing.T, r BoxesRig) {
 	tg := target(r, 1, 1, 1)
 	var phases int
-	got, err := r.Boxes.Converge(boxesCtx(t), boxPlan(tg, true), func(string, string) { phases++ })
+	got, err := r.Boxes.Converge(boxesCtx(t), boxPlan(r, tg, true), func(string, string) { phases++ })
 	if err != nil || !got.Revived || phases == 0 {
 		t.Fatalf("a fresh start starts the agent and reports phases: %+v %v %d", got, err, phases)
 	}
