@@ -263,3 +263,25 @@ type failing struct{}
 func (failing) Load(context.Context, domain.TaskID) (domain.Task, error) {
 	return domain.Task{}, errors.New("db down")
 }
+
+// The proxy addon (images/proxy/grants.py) reads these keys; renaming one breaks it silently.
+func TestTheGrantWireShapeIsWhatTheProxyReads(t *testing.T) {
+	w := newWorld(t)
+	c, _ := w.e.Credentials(context.Background(), target(1, 2), "ana", nil)
+	rec := post(t, w.e.GrantHandler(slog.New(slog.NewTextHandler(io.Discard, nil))), proxyToken, map[string]string{
+		"user": login(t, c).User, "password": login(t, c).Password,
+	})
+	var g struct {
+		Task  int      `json:"task"`
+		Repos []string `json:"repos"`
+		Rules []map[string]any
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &g); err != nil || g.Task != 1 || len(g.Repos) != 2 || len(g.Rules) != 2 {
+		t.Fatalf("%v %s", err, rec.Body)
+	}
+	for _, k := range []string{"hosts", "header", "placeholder", "value", "github"} {
+		if _, ok := g.Rules[0][k]; !ok {
+			t.Errorf("a rule has no %q", k)
+		}
+	}
+}

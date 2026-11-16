@@ -12,6 +12,7 @@ make ci             # lint, audit, test, build
 
 - `make lint` checks formatting (gofumpt, goimports), runs golangci-lint, and runs typos.
 - `make audit` runs govulncheck and fails on an untidy `go.mod`.
+- `make proxy-image` builds the credential proxy in `images/proxy` (mitmproxy and an addon). Its Python tests run during the build.
 - `make test` runs `go test -race -cover`. The Postgres tests skip unless `OUTPOST_TEST_DATABASE_URL` is set. `make test-pg` starts a throwaway `postgres:17` container on a free port and runs them, and CI does the same with a service container. Each test makes its own database.
 - Lint tools are pinned in `tools/go.mod` and run with `go tool -modfile=tools/go.mod`.
 - `GOTOOLCHAIN=local` is set by `mise.toml` and the Makefile, so the pinned Go is the one that runs.
