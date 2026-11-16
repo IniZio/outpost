@@ -32,3 +32,18 @@ func DefaultPolicy() Policy {
 		KeepFinished:  24 * time.Hour,
 	}
 }
+
+// nudgeStep is the nudge ladder for unattended runs, as a pure function. A turn that ran
+// RealWork or longer resets the count. Under the ladder's length the next nudge is armed, and
+// at the end the give-up deadline is armed. The caller arms the returned deadline on turn end,
+// and settle clears it whenever the agent is no longer idle, so "any return to working
+// cancels the pending timer" needs no code of its own.
+func (n Nudge) nudgeStep(worked time.Duration, p Policy) (Nudge, DeadlineKind, time.Duration) {
+	if worked >= p.RealWork {
+		n.Sent = 0
+	}
+	if n.Sent >= len(p.NudgeAfter) {
+		return n, DlGiveUp, p.GiveUp
+	}
+	return n, DlNudge, p.NudgeAfter[n.Sent]
+}

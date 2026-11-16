@@ -1,9 +1,16 @@
 package domain
 
+import (
+	"fmt"
+	"time"
+)
+
 // onTick runs whatever has come due: the finish window's wait, the release of a finished task's
 // computer, or the active task's deadlines.
 func (x *tx) onTick() {
 	switch l := x.t.Life.(type) {
+	case Active:
+		x.tickActive(l)
 	case Closing:
 		x.onCloseDue(l)
 	case Ended:
@@ -36,4 +43,48 @@ func (x *tx) onReleaseDue(e Ended) {
 	e.ReleasedAt = x.now
 	x.t.Life = e
 	x.emit(Release{})
+}
+
+// tickActive runs each due deadline in priority order, so a timeout beats a nudge. A deadline is
+// cleared before its handler runs, and the loop stops once a handler has ended the run.
+func (x *tx) tickActive(a Active) {
+	due := a.Deadlines.Due(x.now)
+	if len(due) == 0 {
+		x.drop(DropNoop)
+		return
+	}
+	for _, k := range due {
+		cur, ok := x.active()
+		if !ok {
+			return
+		}
+		cur.Deadlines = cur.Deadlines.Clear(k)
+		x.t.Life = cur
+		x.runDeadline(k)
+	}
+}
+
+func (x *tx) runDeadline(k DeadlineKind) {
+	switch k {
+	case DlTimeout:
+		x.onTimeout()
+	case DlGiveUp:
+		x.probeDue(WhyGiveUp)
+	case DlNudge:
+		x.probeDue(WhyNudge)
+	case DlReplace, DlSleep:
+	}
+}
+
+// onTimeout fails the run when the task's own timeout has passed.
+func (x *tx) onTimeout() {
+	x.emit(InterruptAgent{})
+	x.close(OutcomeFailed, fmt.Sprintf("Timed out after %d minutes", int(x.t.Spec.Timeout/time.Minute)))
+}
+
+// probeDue asks whether the agent marked the run done before a nudge or the give-up acts on it.
+func (x *tx) probeDue(why Why) {
+	if a, ok := x.active(); ok && a.Turn.idle() {
+		x.t.Life = x.askMarker(a, why)
+	}
 }

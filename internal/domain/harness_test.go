@@ -147,6 +147,27 @@ func kinds(fx []domain.Effect) string {
 	return strings.Join(names, ",")
 }
 
+// sent lists the text of every SendToAgent in the list.
+func sent(fx []domain.Effect) []string {
+	var out []string
+	for _, e := range fx {
+		if s, ok := e.(domain.SendToAgent); ok {
+			out = append(out, s.Text)
+		}
+	}
+	return out
+}
+
+// has reports whether any effect in the list is of type T.
+func has[T domain.Effect](fx []domain.Effect) bool {
+	for _, e := range fx {
+		if _, ok := e.(T); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func mustRefuse(t *testing.T, err, want error) {
 	t.Helper()
 	if !errors.Is(err, want) {

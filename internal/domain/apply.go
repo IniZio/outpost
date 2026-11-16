@@ -58,6 +58,12 @@ func (x *tx) dispatch(ev Event) error {
 		x.onSlotGranted(ev)
 	case Tick:
 		x.onTick()
+	case AgentReport:
+		x.onReport(ev)
+	case AgentExited:
+		x.onExit(ev)
+	case DoneMarker:
+		x.onDoneMarker(ev)
 	case Progressed:
 		x.onProgressed(ev)
 	case Started:
