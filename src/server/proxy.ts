@@ -18,7 +18,7 @@ const caFile = join(dir, "ca", "mitmproxy-ca-cert.pem");
 
 export const PLACEHOLDER_TOKEN = "outpost-proxy";
 export const CA_PATH = "/usr/local/share/ca-certificates/outpost-proxy.crt";
-const NO_PROXY = "localhost,127.0.0.1,::1,10.0.2.2,.local,.internal";
+const NO_PROXY = "localhost,127.0.0.1,0.0.0.0,::1,10.0.2.2,.local,.internal";
 
 export const newSecret = () => randomBytes(18).toString("base64url");
 
@@ -78,7 +78,6 @@ export function proxyEnv(task: Pick<Task, "id" | "proxy_secret">, port = 8080) {
     HTTPS_PROXY: url, HTTP_PROXY: url, https_proxy: url, http_proxy: url,
     NO_PROXY, no_proxy: NO_PROXY,
     YARN_HTTPS_PROXY: url, YARN_HTTP_PROXY: url,
-    NODE_USE_ENV_PROXY: "1",
     NODE_EXTRA_CA_CERTS: CA_PATH,
     REQUESTS_CA_BUNDLE: "/etc/ssl/certs/ca-certificates.crt",
   };
