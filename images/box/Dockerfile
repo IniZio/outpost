@@ -26,3 +26,12 @@ RUN curl -fsSL --retry 5 --retry-all-errors --connect-timeout 20 https://bun.sh/
 
 RUN mkdir -p /workspace
 WORKDIR /workspace
+
+# git reads credentials from gh for GitHub, system-wide. gh takes GH_TOKEN (the proxy's placeholder)
+# when there is no hosts.yml. The empty helper resets any inherited list.
+RUN printf '%s\n' \
+      '[credential "https://github.com"]' '	helper =' '	helper = !gh auth git-credential' \
+      '[credential "https://gist.github.com"]' '	helper =' '	helper = !gh auth git-credential' \
+      > /etc/gitconfig \
+    && out=$(printf 'protocol=https\nhost=github.com\n\n' | GH_TOKEN=build-check git credential fill) \
+    && echo "$out" | grep -q '^password=build-check$'
