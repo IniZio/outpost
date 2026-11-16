@@ -37,6 +37,7 @@ const (
 // Config is how the adapter is set up. The zero value works.
 type Config struct {
 	Model string        // --model; empty keeps Claude Code's default
+	Bin   string        // the command in the box; empty is Bin. A test points it at a fake claude
 	Poll  time.Duration // how often LastMessage looks again; default 500ms
 }
 
@@ -49,6 +50,9 @@ var _ ports.Agent = (*Agent)(nil)
 func New(cfg Config) *Agent {
 	if cfg.Poll <= 0 {
 		cfg.Poll = defaultPoll
+	}
+	if cfg.Bin == "" {
+		cfg.Bin = Bin
 	}
 	return &Agent{cfg: cfg}
 }
@@ -67,7 +71,7 @@ func SessionID(t domain.TaskID) string {
 // sandbox, and the home files that keep it from stopping at a dialog.
 func (a *Agent) Launch(_ context.Context, f ports.LaunchFor) (ports.Launch, error) {
 	session := SessionID(f.Target.Task)
-	argv := []string{Bin, "--dangerously-skip-permissions"}
+	argv := []string{a.cfg.Bin, "--dangerously-skip-permissions"}
 	if f.Resume {
 		argv = append(argv, "--resume", session)
 	} else {

@@ -186,3 +186,8 @@ func (s *Store) Lease(ctx context.Context) (func(), error) {
 		<-done
 	}, nil
 }
+
+// Ping checks that the database answers.
+func (s *Store) Ping(ctx context.Context) error {
+	return wrap(s.pool.Ping(ctx), "postgres: ping")
+}

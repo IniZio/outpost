@@ -136,3 +136,28 @@ func raceLinks(t *testing.T, s *postgres.Store, id domain.MachineID, n int) []do
 	slices.Sort(gens)
 	return gens
 }
+
+func TestMarkAllOfflineClearsStaleFlags(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	id := addMachine(t, s, domain.Machine{Name: "a", Owner: "ana", Role: domain.RoleSandbox, Slots: 1})
+	if _, err := s.Linked(ctx, id, "b1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkAllOffline(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if linked, _, err := s.Seen(ctx, id); err != nil || linked {
+		t.Fatalf("offline after a restart: %v %v", linked, err)
+	}
+	if err := s.SetRepo(ctx, domain.Repo{Name: "o/b", ReadyImage: "r:1", ReadyOn: id, ReadyAt: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetRepo(ctx, domain.Repo{Name: "o/a"}); err != nil {
+		t.Fatal(err)
+	}
+	rs, err := s.Repos(ctx)
+	if err != nil || len(rs) != 2 || rs[0].Name != "o/a" || !rs[1].ReadyAt.Equal(t0) {
+		t.Fatalf("%+v %v", rs, err)
+	}
+}

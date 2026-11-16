@@ -135,3 +135,35 @@ func (s *Store) SetRepo(ctx context.Context, r domain.Repo) error {
 		string(r.Name), r.ReadyImage, string(r.ReadyOn), at, r.Notes, r.SetupTask)
 	return wrap(err, "postgres: set repo")
 }
+
+// Repos lists every repo row, by name.
+func (s *Store) Repos(ctx context.Context) ([]domain.Repo, error) {
+	rows, err := s.pool.Query(ctx, `SELECT name, ready_image, ready_on, ready_at, notes, setup_task FROM repos ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: repos: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.Repo
+	for rows.Next() {
+		var (
+			r  domain.Repo
+			at *time.Time
+		)
+		if err := rows.Scan(&r.Name, &r.ReadyImage, &r.ReadyOn, &at, &r.Notes, &r.SetupTask); err != nil {
+			return nil, fmt.Errorf("postgres: scan repo: %w", err)
+		}
+		if at != nil {
+			r.ReadyAt = *at
+		}
+		out = append(out, r)
+	}
+	return out, wrap(rows.Err(), "postgres: read repos")
+}
+
+// MarkAllOffline clears every online flag. The server calls it at start, before any agent can link,
+// because a flag left by a process that died is stale. It bumps no link generation, so a late
+// Unlinked from the dead process still matches nothing newer.
+func (s *Store) MarkAllOffline(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `UPDATE machines SET online = false, linked_at = now() WHERE online`)
+	return wrap(err, "postgres: mark machines offline")
+}

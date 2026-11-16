@@ -42,7 +42,7 @@ test-pg:
 	port=$$(docker port $$c 5432/tcp | head -n1 | sed 's/.*://'); \
 	until docker exec $$c pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; do sleep 0.5; done; \
 	OUTPOST_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:$$port/postgres \
-		go test -race -cover -count=1 ./internal/store/...
+		go test -race -cover -count=1 ./internal/store/... ./cmd/...
 
 # hc-golden records the real hc's answers into internal/hc/testdata. Run it after an hc upgrade.
 hc-golden:
