@@ -26,6 +26,9 @@ type config struct {
 	ClaudeModel string         // OUTPOST_CLAUDE_MODEL
 	ClaudeBin   string         // OUTPOST_CLAUDE_BIN: the agent's command in the box
 	Migrate     bool           // OUTPOST_MIGRATE: migrate at start
+	ProxyURL    string         // OUTPOST_PROXY_URL: the credential proxy boxes dial; empty runs boxes with no credentials
+	ProxyCAFile string         // OUTPOST_PROXY_CA_FILE: the proxy's public CA
+	ProxyToken  string         // OUTPOST_PROXY_TOKEN: the bearer the proxy presents for grants
 	Drain       time.Duration  // OUTPOST_DRAIN: budget for the hub drain and the HTTP shutdown
 	LogLevel    slog.Level     // OUTPOST_LOG
 }
@@ -47,6 +50,9 @@ func loadConfig(env func(string) string) (config, error) {
 		ClaudeModel: env("OUTPOST_CLAUDE_MODEL"),
 		ClaudeBin:   env("OUTPOST_CLAUDE_BIN"),
 		Migrate:     get("OUTPOST_MIGRATE", "true") == "true",
+		ProxyURL:    env("OUTPOST_PROXY_URL"),
+		ProxyCAFile: env("OUTPOST_PROXY_CA_FILE"),
+		ProxyToken:  env("OUTPOST_PROXY_TOKEN"),
 	}
 	c.Allowed = logins(env("OUTPOST_ALLOWED_LOGINS"))
 	errs := c.parse(get)

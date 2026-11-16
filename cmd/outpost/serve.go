@@ -16,10 +16,12 @@ import (
 	"github.com/IniZio/outpost/internal/api"
 	"github.com/IniZio/outpost/internal/auth"
 	"github.com/IniZio/outpost/internal/domain"
+	"github.com/IniZio/outpost/internal/egress"
 	"github.com/IniZio/outpost/internal/github"
 	"github.com/IniZio/outpost/internal/lifecycle"
 	"github.com/IniZio/outpost/internal/link"
 	"github.com/IniZio/outpost/internal/ops"
+	"github.com/IniZio/outpost/internal/ports"
 	"github.com/IniZio/outpost/internal/remote"
 	"github.com/IniZio/outpost/internal/secrets"
 	"github.com/IniZio/outpost/internal/store/postgres"
@@ -90,12 +92,19 @@ func (s *server) wire(ctx context.Context, key secrets.Key, clock domain.Clock) 
 	if err != nil {
 		return fmt.Errorf("remote: %w", err)
 	}
+	v, err := secrets.NewVault(key, s.store, clock)
+	if err != nil {
+		return fmt.Errorf("vault: %w", err)
+	}
+	creds, grants, err := s.credentials(key, v)
+	if err != nil {
+		return err
+	}
 	maxRun := s.cfg.MaxRunning
 	s.runner, err = lifecycle.New(lifecycle.Config{
 		Store: s.store, Boxes: boxes, Clock: clock, Policy: domain.DefaultPolicy(), BaseImage: s.cfg.BaseImage,
-		Agent: claude.New(claude.Config{Model: s.cfg.ClaudeModel, Bin: s.cfg.ClaudeBin}),
-		// The credential wiring: noCredentials until the egress grants are built.
-		Secrets:  noCredentials{},
+		Agent:    claude.New(claude.Config{Model: s.cfg.ClaudeModel, Bin: s.cfg.ClaudeBin}),
+		Secrets:  creds,
 		Capacity: func() domain.Capacity { return domain.Capacity{Max: maxRun} },
 		Log:      s.log,
 	})
@@ -104,13 +113,9 @@ func (s *server) wire(ctx context.Context, key secrets.Key, clock domain.Clock) 
 	}
 	poke := s.runner.Poke
 	tap.poke.Store(&poke)
-	v, err := secrets.NewVault(key, s.store, clock)
-	if err != nil {
-		return fmt.Errorf("vault: %w", err)
-	}
 	s.base, s.cancelBase = context.WithCancel(context.WithoutCancel(ctx))
 	s.http = &http.Server{
-		Handler: s.routes(v, clock), ReadHeaderTimeout: 10 * time.Second,
+		Handler: s.routes(v, grants, clock), ReadHeaderTimeout: 10 * time.Second,
 		BaseContext: func(net.Listener) context.Context { return s.base },
 	}
 	return nil
@@ -134,10 +139,27 @@ func (s *server) wireLink(tap *presence, clock domain.Clock) error {
 	return nil
 }
 
-func (s *server) routes(v *secrets.Vault, clock domain.Clock) http.Handler {
+// credentials is the egress over the vault when a proxy is set. With none, boxes get no
+// credentials: they clone only public repos and the agent has no token.
+func (s *server) credentials(key secrets.Key, v *secrets.Vault) (ports.Secrets, http.Handler, error) {
+	if s.cfg.ProxyURL == "" {
+		s.log.Warn("OUTPOST_PROXY_URL is not set: boxes run with no credentials")
+		return noCredentials{}, nil, nil
+	}
+	e, err := egress.New(egress.Config{
+		Key: key, Vault: v, Tasks: s.store, ProxyURL: s.cfg.ProxyURL, CAFile: s.cfg.ProxyCAFile, ProxyToken: s.cfg.ProxyToken,
+		Rules: []egress.Rule{egress.GitHub(), egress.Bearer("api.anthropic.com", claude.OAuthPlaceholder, "claude")},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("egress: %w", err)
+	}
+	return e, e.GrantHandler(s.log), nil
+}
+
+func (s *server) routes(v *secrets.Vault, grants http.Handler, clock domain.Clock) http.Handler {
 	a := auth.New(auth.Config{
 		Sessions: s.store, Clock: clock, Allowed: s.cfg.Allowed,
-		GitHubUser: github.Client{}.User, Secure: len(s.cfg.PublicURL) > 5 && s.cfg.PublicURL[:5] == "https",
+		GitHubUser: githubUser, Secure: len(s.cfg.PublicURL) > 5 && s.cfg.PublicURL[:5] == "https",
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", api.New(api.Config{
@@ -147,7 +169,19 @@ func (s *server) routes(v *secrets.Vault, clock domain.Clock) http.Handler {
 	mux.Handle("GET /machines/link", s.linkHandler())
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("GET /readyz", s.ready)
+	if grants != nil {
+		mux.Handle(egress.GrantPath, grants)
+	}
 	return mux
+}
+
+// githubUser reads a GitHub token's login. A token GitHub refuses is no session, not a fault.
+func githubUser(ctx context.Context, token string) (domain.Login, error) {
+	l, err := github.Client{}.User(ctx, token)
+	if errors.Is(err, github.ErrBadToken) {
+		return "", fmt.Errorf("%w: %w", auth.ErrNoSession, err)
+	}
+	return l, err //nolint:wrapcheck // github wraps its own
 }
 
 // linkHandler refuses links until this process leads, so a machine never links to a standby that
@@ -201,9 +235,12 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.Drain)
 	defer cancel()
 	var dw sync.WaitGroup
-	dw.Go(func() { _ = s.hub.Drain(dctx) })
+	dw.Go(func() {
+		// Links run on their request's context, so the base is cancelled only once they moved.
+		_ = s.hub.Drain(dctx)
+		s.cancelBase()
+	})
 	dw.Go(func() { _ = s.http.Shutdown(dctx) })
-	time.AfterFunc(time.Second, s.cancelBase)
 	dw.Wait()
 	wg.Wait()
 	return first
