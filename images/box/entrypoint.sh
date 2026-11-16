@@ -26,7 +26,18 @@ cp "$run/ssh/id.pub" /root/.ssh/authorized_keys
 chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
 [ -f /etc/ssh/ssh_host_ed25519_key ] || ssh-keygen -q -A
 git config --global --add safe.directory '*'
-if [ -n "${GH_TOKEN:-}" ]; then gh auth setup-git >/dev/null 2>&1 || true; fi
+if [ -n "${GH_TOKEN:-}" ]; then
+  gh auth setup-git >/dev/null 2>&1 || true
+  if ! git config --global user.email >/dev/null; then
+    who=$(timeout 20 gh api user --jq '[.id, .login, (.name // .login)] | @tsv' 2>/dev/null || true)
+    if [ -n "$who" ]; then
+      printf '%s\n' "$who" | while IFS="$(printf '\t')" read -r id login name; do
+        git config --global user.name "$name"
+        git config --global user.email "$id+$login@users.noreply.github.com"
+      done
+    fi
+  fi
+fi
 
 touch "$run/box-ready"
 exec /usr/sbin/sshd -D -e -p 2222 -o ListenAddress=127.0.0.1 \

@@ -245,7 +245,7 @@ function buildPrompt(task: Task, repo: Repo, devices: string[]) {
     lines.push(
       "",
       task.workflow_id
-        ? "Nobody is watching this run and nobody will answer questions: decide sensibly and note your assumptions. When the whole task is complete, run `touch /run/outpost/done`, then end with a short summary: what you did, links to PRs, and anything left for a human."
+        ? "Nobody is watching this run and nobody will answer questions: decide sensibly and note your assumptions. If a person closed a PR or issue you opened, leave it closed: they decided. When the whole task is complete, run `touch /run/outpost/done`, then end with a short summary: what you did, links to PRs, and anything left for a human."
         : "When you finish, end with a short summary: what you did, links to PRs, and anything left for a human.",
       "",
       "Task:",
@@ -356,7 +356,13 @@ export async function saveReady(id: number) {
 export function onAgentStatus(id: number, status: string, msg: string | null = null) {
   const t = getTask(id);
   if (!t || !["working", "waiting"].includes(t.status)) return;
-  if (status === "working") clearTimeout(nudges.get(id)?.timer);
+  if (status === "working") {
+    const n = nudges.get(id);
+    if (n) {
+      clearTimeout(n.timer);
+      n.workingSince ??= Date.now();
+    }
+  }
   if (status === "working" && msg !== t.phase) update(id, { phase: msg });
   if (t.agent_status === status && !(t.status === "working" && status !== "working")) return;
   update(id, { agent_status: status, ...(status === "working" ? {} : { phase: null }) });
@@ -376,8 +382,10 @@ export function onAgentStatus(id: number, status: string, msg: string | null = n
   }
 }
 
-const nudges = new Map<number, { count: number; timer?: Timer }>();
+const nudges = new Map<number, { count: number; timer?: Timer; workingSince?: number }>();
 const NUDGE_AFTER_MS = [3 * 60_000, 10 * 60_000, 10 * 60_000];
+const REAL_WORK_MS = 2 * 60_000;
+const GIVE_UP_AFTER_MS = 30 * 60_000;
 const NUDGE =
   "[outpost] You stopped without marking this run as done. Nobody is watching this run. If the whole task is complete, run `touch /run/outpost/done` and then write your final summary. If you are waiting for something, keep going.";
 
@@ -391,9 +399,17 @@ async function unattendedTurnEnded(id: number) {
   const n = nudges.get(id) ?? { count: 0 };
   clearTimeout(n.timer);
   nudges.set(id, n);
+  if (n.workingSince && Date.now() - n.workingSince >= REAL_WORK_MS) n.count = 0;
+  n.workingSince = undefined;
   if (n.count >= NUDGE_AFTER_MS.length) {
-    taskEvent(id, "warning", "The agent kept stopping without marking the run done, so it was finished as is.");
-    return finish(id, "done");
+    n.timer = setTimeout(async () => {
+      const cur = getTask(id);
+      if (!cur || cur.status !== "working" || cur.agent_status === "working") return;
+      if (await doneMarked(id)) return finish(id, "done");
+      taskEvent(id, "warning", "The agent stayed idle without marking the run done, so it was finished as is.");
+      await finish(id, "done");
+    }, GIVE_UP_AFTER_MS);
+    return;
   }
   n.timer = setTimeout(async () => {
     const cur = getTask(id);
