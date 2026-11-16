@@ -1,2 +1,2 @@
-// Package secrets keeps encrypted secrets, credential host rules and the OAuth clients for MCP servers.
+// Package secrets keeps each owner's secrets encrypted in the store, and the server's master key.
 package secrets

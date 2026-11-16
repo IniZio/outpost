@@ -408,3 +408,7 @@ func TestSecrets(t *testing.T) {
 func TestFakeSessionsMeetTheContract(t *testing.T) {
 	portstest.SessionsContract(t, portstest.NewSessions())
 }
+
+func TestSecretRowsMeetTheContract(t *testing.T) {
+	portstest.SecretRowsContract(t, portstest.NewSecretRows())
+}

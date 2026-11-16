@@ -1,5 +1,5 @@
 // Package ports holds the interfaces the core uses. lifecycle drives tasks through four of them:
 // Store (state), Boxes (a task's box and the agent terminal in it), Agent (one agent CLI) and
-// Secrets (credential placeholders). Enrollments stores machine pairings. Sandbox is the box
-// provider the machine agent drives. Each names only domain types and the plain values here.
+// Secrets (box credentials). Enrollments stores machine pairings and SecretRows sealed secrets.
+// Sandbox is the box provider the machine agent drives. Each names only domain types and the plain values here.
 package ports
