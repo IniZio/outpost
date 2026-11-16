@@ -63,8 +63,10 @@ func newRig(t *testing.T, opts ...option) *rig {
 // newRunner is a Runner over the fakes. It leads only once Run holds the lease.
 func newRunner(t *testing.T, store *portstest.Store, boxes *portstest.Boxes) *lifecycle.Runner {
 	t.Helper()
+	agent := &portstest.Agent{}
+	agent.SetSummary("all done")
 	r, err := lifecycle.New(lifecycle.Config{
-		Store: store, Boxes: boxes, Agent: &portstest.Agent{}, Secrets: &portstest.Secrets{},
+		Store: store, Boxes: boxes, Agent: agent, Secrets: &portstest.Secrets{},
 		Clock: domain.SystemClock{}, Policy: domain.DefaultPolicy(), BaseImage: "base:1", PollEvery: 20 * time.Millisecond,
 		Capacity: func() domain.Capacity { return domain.Capacity{Max: 2} },
 	})

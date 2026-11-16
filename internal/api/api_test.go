@@ -45,9 +45,9 @@ func TestATaskRunsAndItsOwnerSteersIt(t *testing.T) {
 	if _, err := g.owner.Stop(c, task.ID); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the task stops", func() bool {
+	eventually(t, "the task stops with the agent's summary", func() bool {
 		got, err := g.owner.Task(c, task.ID)
-		return err == nil && got.Ended()
+		return err == nil && got.Ended() && got.Summary == "all done"
 	})
 }
 

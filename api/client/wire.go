@@ -19,6 +19,8 @@ type Task struct {
 	Status    string    `json:"status"`
 	Phase     string    `json:"phase,omitempty"`
 	Machine   string    `json:"machine,omitempty"`
+	Summary   string    `json:"summary,omitempty"`
+	Error     string    `json:"error,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	Access    string    `json:"access"`
 }

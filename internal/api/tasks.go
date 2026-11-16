@@ -47,6 +47,14 @@ func view(t domain.Task, a domain.Access) client.Task {
 	if a == domain.AccessControl {
 		v.Access = "control"
 	}
+	switch l := t.Life.(type) {
+	case domain.Active:
+		v.Summary = l.Summary
+	case domain.Closing:
+		v.Summary = l.Summary
+	case domain.Ended:
+		v.Summary, v.Error = l.Summary, l.Error
+	}
 	return v
 }
 
