@@ -21,6 +21,7 @@ var t0 = time.Date(2026, 11, 18, 6, 0, 0, 0, time.UTC)
 type rig struct {
 	t       *testing.T
 	ctx     context.Context
+	cancel  context.CancelFunc
 	r       *Runner
 	store   *portstest.Store
 	boxes   *portstest.Boxes
@@ -40,13 +41,26 @@ func newRig(t *testing.T, store *portstest.Store) *rig {
 	return newRigWith(t, store, func(*Config) {})
 }
 
+// newRigWith is a leading rig with its feeds running, as Run would leave a process.
 func newRigWith(t *testing.T, store *portstest.Store, tweak func(*Config)) *rig {
 	t.Helper()
+	g := newIdleRig(t, store, tweak)
+	g.r.lead.Store(true)
+	g.r.startFeeds(g.ctx)
+	return g
+}
+
+// newIdleRig is a Runner that is not leading and has started nothing, for tests of Run.
+func newIdleRig(t *testing.T, store *portstest.Store, tweak func(*Config)) *rig {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
 	g := &rig{
-		t: t, ctx: context.Background(), store: store, boxes: portstest.NewBoxes(),
+		t: t, ctx: ctx, cancel: cancel, store: store, boxes: portstest.NewBoxes(),
 		agent: &portstest.Agent{}, secrets: &portstest.Secrets{}, clock: domain.NewManualClock(t0),
 	}
-	store.AddMachine(domain.Machine{ID: machine, Owner: owner, Role: domain.RoleSandbox, Slots: 4}, true)
+	if ms, _ := store.Machines(ctx); len(ms) == 0 {
+		store.AddMachine(domain.Machine{ID: machine, Owner: owner, Role: domain.RoleSandbox, Slots: 4}, true)
+	}
 	cfg := Config{
 		Store: store, Boxes: g.boxes, Agent: g.agent, Secrets: g.secrets, Clock: g.clock,
 		Policy: domain.DefaultPolicy(), BaseImage: "base:1", After: readyAfter,
@@ -57,7 +71,6 @@ func newRigWith(t *testing.T, store *portstest.Store, tweak func(*Config)) *rig 
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.lead.Store(true)
 	g.r = r
 	t.Cleanup(g.close)
 	return g
@@ -68,11 +81,13 @@ func newRigWith(t *testing.T, store *portstest.Store, tweak func(*Config)) *rig 
 func (g *rig) close() {
 	g.r.lead.Store(false)
 	g.r.stop(errDraining)
+	g.cancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := g.r.quiesce(ctx); err != nil {
 		g.t.Errorf("rig did not drain: %v", err)
 	}
+	g.r.bg.Wait()
 }
 
 func (g *rig) task(id domain.TaskID) domain.Task {
@@ -130,11 +145,29 @@ func (g *rig) started(kind domain.Kind) domain.TaskID {
 	return id
 }
 
+// feed delivers a signal through the machine's feed, as the box adapter would.
 func (g *rig) feed(id domain.TaskID, s domain.Signal) {
 	g.t.Helper()
-	if _, err := g.r.step(g.ctx, id, s); err != nil {
+	g.boxes.Signal(machine, id, s)
+}
+
+// pass runs one scheduler pass and waits for the starts it began.
+func (g *rig) pass() {
+	g.t.Helper()
+	if err := g.r.schedule(g.ctx); err != nil {
 		g.t.Fatal(err)
 	}
+	g.settle()
+}
+
+// advance moves the clock, runs what has come due and waits for its effects.
+func (g *rig) advance(d time.Duration) {
+	g.t.Helper()
+	g.clock.Advance(d)
+	if _, err := g.r.RunDue(g.ctx); err != nil {
+		g.t.Fatal(err)
+	}
+	g.settle()
 }
 
 func (g *rig) wantStatus(id domain.TaskID, want domain.Status) {

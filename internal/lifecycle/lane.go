@@ -173,15 +173,20 @@ func (b Budgets) forAsk(e domain.Effect) time.Duration {
 }
 
 // runCommand carries out one outbox row and marks it done. A failure is logged and the row is still
-// marked done, because commands are best effort: the box may already be gone.
+// marked done, because commands are best effort: the box may already be gone. A drain cancels the
+// command and leaves its row pending, and the next process runs it again.
 func (r *Runner) runCommand(row ports.OutboxRow) {
 	budget := r.cfg.Budgets.Command
 	if row.Kind == ports.RowRelease {
 		budget = r.cfg.Budgets.Release
 	}
-	ctx, cancel := context.WithTimeout(r.base, budget)
+	ctx, cancel := context.WithTimeout(r.jobCtx, budget)
 	defer cancel()
-	if err := r.exec(ctx, row); err != nil {
+	err := r.exec(ctx, row)
+	if r.jobCtx.Err() != nil {
+		return
+	}
+	if err != nil {
 		r.cfg.Log.WarnContext(ctx, "effect failed", "task", row.Target.Task, "kind", row.Kind, "err", err)
 	}
 	r.markDone(row.ID)

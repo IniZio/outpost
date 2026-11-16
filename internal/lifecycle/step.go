@@ -133,6 +133,7 @@ func (r *Runner) commit(ctx context.Context, c *cell, prev uint64, res domain.Re
 	}
 	c.enqueue(r, items)
 	r.publish(c.id)
+	r.noteWake(res.Task)
 	return nil
 }
 

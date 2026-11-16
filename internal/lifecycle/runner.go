@@ -126,6 +126,13 @@ type Runner struct {
 	idle     []chan struct{}
 	watchers map[domain.TaskID]map[chan struct{}]struct{}
 	poke     chan struct{}
+	nudge    chan struct{}
+	armed    atomic.Int64
+	feeds    map[domain.MachineID]bool
+	waiting  map[domain.TaskID]struct{}
+	schedMu  sync.Mutex
+	started  chan struct{}
+	bg       sync.WaitGroup
 
 	base   context.Context
 	jobCtx context.Context
@@ -144,6 +151,10 @@ func New(cfg Config) (*Runner, error) {
 		cells:    map[domain.TaskID]*cell{},
 		watchers: map[domain.TaskID]map[chan struct{}]struct{}{},
 		poke:     make(chan struct{}, 1),
+		nudge:    make(chan struct{}, 1),
+		feeds:    map[domain.MachineID]bool{},
+		waiting:  map[domain.TaskID]struct{}{},
+		started:  make(chan struct{}),
 		base:     context.Background(),
 		jobCtx:   jobCtx,
 		stop:     stop,
