@@ -8,6 +8,7 @@ setsid "$@" </dev/null 3<&- &
 step=$!
 {
   while read -r _; do :; done
+  trap '' TERM
   kill -TERM -- "-$step" 2>/dev/null
   sleep 5
   kill -KILL -- "-$step" 2>/dev/null
