@@ -32,6 +32,9 @@ type LaunchFor struct {
 	Owner  domain.Login
 	Prompt string
 	Resume bool
+	// Repos are the task's repos, the main one first. Each checkout is a directory the agent may
+	// start in, so the adapter trusts each.
+	Repos []domain.RepoName
 }
 
 // Agent is one coding agent CLI: Claude Code first, Cursor's agent next. internal/agent/claude

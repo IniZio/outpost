@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/ports"
 )
 
@@ -83,6 +84,25 @@ func TestLaunchEnv(t *testing.T) {
 	}
 	if len(l.Env) != len(want) {
 		t.Errorf("unexpected env: %v", l.Env)
+	}
+}
+
+func TestLaunchTrustsRepoDirs(t *testing.T) {
+	repos := []domain.RepoName{"o/moor-pilot-example", "o/other"}
+	l, err := New(Config{}).Launch(context.Background(), ports.LaunchFor{Target: ports.Target{Task: 1}, Prompt: "x", Repos: repos})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		Projects map[string]struct {
+			Trusted bool `json:"hasTrustDialogAccepted"`
+		} `json:"projects"`
+	}
+	mustJSON(t, l.Home[0].Data, &state)
+	for _, r := range repos {
+		if !state.Projects[domain.RepoDir(r)].Trusted {
+			t.Errorf("repo %s not trusted: %+v", r, state.Projects)
+		}
 	}
 }
 

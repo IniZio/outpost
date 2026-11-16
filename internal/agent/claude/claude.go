@@ -23,8 +23,8 @@ const (
 	Bin = "/opt/outpost/bin/claude"
 	// Home is the agent's home in the box, the home volume's mount.
 	Home = "/root"
-	// WorkspaceDir is the parent of every checkout. Claude Code takes trust of a directory to cover
-	// the ones below it, so one entry trusts every repo.
+	// WorkspaceDir is the parent of every checkout. Newer Claude Code does not let it cover a git
+	// root below it, so each repo dir is trusted too.
 	WorkspaceDir = "/workspace"
 	// OAuthPlaceholder is what the box holds in CLAUDE_CODE_OAUTH_TOKEN. The proxy swaps it for the
 	// owner's real token on the way to the API.
@@ -88,7 +88,7 @@ func (a *Agent) Launch(_ context.Context, f ports.LaunchFor) (ports.Launch, erro
 	if !f.Resume {
 		argv = append(argv, f.Prompt)
 	}
-	home, err := homeFiles()
+	home, err := homeFiles(f.Repos)
 	if err != nil {
 		return ports.Launch{}, err
 	}
@@ -121,13 +121,18 @@ func (a *Agent) setup() [][]string {
 // bypass-permissions and trust dialogs. The settings file records the transcript path at every
 // session start, because the transcript's directory is named after the working directory, which
 // LastMessage does not know.
-func homeFiles() ([]ports.File, error) {
+func homeFiles(repos []domain.RepoName) ([]ports.File, error) {
+	trusted := func() map[string]any {
+		return map[string]any{"hasTrustDialogAccepted": true, "hasCompletedProjectOnboarding": true}
+	}
+	projects := map[string]any{WorkspaceDir: trusted()}
+	for _, r := range repos {
+		projects[domain.RepoDir(r)] = trusted()
+	}
 	state := map[string]any{
 		"hasCompletedOnboarding":        true,
 		"bypassPermissionsModeAccepted": true,
-		"projects": map[string]any{
-			WorkspaceDir: map[string]any{"hasTrustDialogAccepted": true, "hasCompletedProjectOnboarding": true},
-		},
+		"projects":                      projects,
 	}
 	settings := map[string]any{
 		"skipDangerousModePermissionPrompt": true,

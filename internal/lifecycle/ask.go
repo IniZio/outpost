@@ -115,7 +115,8 @@ func (r *Runner) plan(ctx context.Context, t domain.Task, run domain.AgentRun, g
 		return ports.Plan{}, fmt.Errorf("lifecycle: repo %s: %w", t.Spec.Repo, err)
 	}
 	tg := ports.Target{Task: t.ID, Machine: t.Machine, Run: run, Gen: gen}
-	f := ports.LaunchFor{Target: tg, Owner: t.Owner, Resume: !fresh}
+	repos := append([]domain.RepoName{t.Spec.Repo}, t.Spec.Also...)
+	f := ports.LaunchFor{Target: tg, Owner: t.Owner, Resume: !fresh, Repos: repos}
 	if fresh {
 		f.Prompt = domain.LaunchPrompt(t, repo)
 	}
@@ -123,7 +124,6 @@ func (r *Runner) plan(ctx context.Context, t domain.Task, run domain.AgentRun, g
 	if err != nil {
 		return ports.Plan{}, fmt.Errorf("lifecycle: agent launch: %w", err)
 	}
-	repos := append([]domain.RepoName{t.Spec.Repo}, t.Spec.Also...)
 	creds, err := r.cfg.Secrets.Credentials(ctx, tg, t.Owner, repos)
 	if err != nil {
 		return ports.Plan{}, fmt.Errorf("lifecycle: credentials: %w", err)
