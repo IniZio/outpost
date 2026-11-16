@@ -23,7 +23,7 @@ func (x *tx) onRecovered(ev Recovered) {
 func (x *tx) recoverStarting(s Starting) {
 	const text = "Outpost restarted while this computer was starting; starting over"
 	if s.Resume != nil {
-		x.t.Life = *s.Resume
+		x.unwake(s, 0)
 		x.note(EntryPhase, "Outpost restarted while waking the task; send a message to try again")
 		return
 	}

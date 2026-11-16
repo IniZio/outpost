@@ -24,11 +24,11 @@ func (x *tx) onStop(ev UserStop) error {
 }
 
 // stopStarting aborts a start. A fresh start has nothing worth resuming, so it releases at once.
-// A wake gives the old Ended back whole.
+// A wake gives the old Ended back, still waiting for the wake's answer.
 func (x *tx) stopStarting(s Starting) {
 	x.emit(AbortStart{})
 	if s.Resume != nil {
-		x.t.Life = *s.Resume
+		x.unwake(s, s.Ask)
 		x.note(EntryPhase, "Stopped waking the task")
 		return
 	}
@@ -52,7 +52,7 @@ func (x *tx) onSaveTemplate(ev SaveTemplateRequested) error {
 	ask := x.newAsk()
 	x.t.Life = Closing{
 		Want: OutcomeDone, From: StatusFailed, Step: CloseTemplate, Ask: ask,
-		Until: x.now.Add(x.p.CloseGrace), Summary: e.Summary,
+		Until: x.now.Add(x.p.CloseGrace), Summary: e.Summary, Ensure: e.Ensure,
 	}
 	x.emit(SaveTemplate{Ask: ask})
 	return nil

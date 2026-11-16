@@ -239,10 +239,25 @@ func (f *fuzzer) checkApplied(ev domain.Event, res domain.Result) {
 		f.t.Fatalf("Apply(%T) made a task the store cannot round-trip: %v", ev, err)
 	}
 	f.checkDuplicate(ev, res.Task)
+	f.checkBoxStopped(ev, res)
 	f.task = res.Task
 	f.effects = append(f.effects, res.Effects...)
 	f.effects = f.effects[max(0, len(f.effects)-16):]
 	f.reached[reachKey(res.Task)] = true
+}
+
+// checkBoxStopped requires a step that abandons a wake, or takes a wake's late answer, to stop
+// the box again whenever the ended task wants it stopped.
+func (f *fuzzer) checkBoxStopped(ev domain.Event, res domain.Result) {
+	f.t.Helper()
+	s, wasWaking := f.task.Life.(domain.Starting)
+	_, wasEnded := f.task.Life.(domain.Ended)
+	_, isEnsured := ev.(domain.Ensured)
+	_, endedNow := res.Task.Life.(domain.Ended)
+	abandoned := wasWaking && s.Resume != nil && endedNow
+	if (abandoned || wasEnded && isEnsured) && res.Task.BoxWant() == domain.BoxStopped && !has[domain.StopBox](res.Effects) {
+		f.t.Fatalf("%T left a woken box running: effects %q", ev, kinds(res.Effects))
+	}
 }
 
 // checkDuplicate delivers the same event again at the same instant. A system event must then be

@@ -109,7 +109,7 @@ func TestStoppingAWakeGivesTheOldRunBack(t *testing.T) {
 	r := runOf(t, task)
 
 	res := r.apply(domain.UserStop{By: owner})
-	if kinds(res.Effects) != "AbortStart" {
+	if kinds(res.Effects) != "AbortStart,StopBox" {
 		t.Errorf("effects = %q", kinds(res.Effects))
 	}
 	r.want(domain.StatusDone)

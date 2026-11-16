@@ -44,8 +44,11 @@ func TestARestartDuringAFreshStartQueuesTheTaskAgain(t *testing.T) {
 func TestARestartDuringAWakeGivesTheEndedRunBack(t *testing.T) {
 	r := stopped(t)
 	r.apply(domain.UserMessage{By: owner, Text: "carry on"})
-	restarted(t, r, agentGone)
+	res := restarted(t, r, agentGone)
 	r.want(domain.StatusStopped)
+	if !has[domain.StopBox](res.Effects) {
+		t.Errorf("effects = %q: the wake may have started the box", kinds(res.Effects))
+	}
 	if _, ok := r.task.Life.(domain.Ended); !ok {
 		t.Errorf("life = %+v", r.task.Life)
 	}

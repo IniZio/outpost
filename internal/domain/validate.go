@@ -113,6 +113,7 @@ func (t Task) validateClosing(c Closing) error {
 		rule{c.From >= StatusQueued && c.From <= StatusStopped, "unknown status shown while closing"},
 		rule{c.Step == CloseSummary || c.Step == CloseTemplate && c.Want == OutcomeDone && t.Kind.SavesTemplate(), "closing step does not fit the task"},
 		rule{!c.Until.IsZero(), "closing has no deadline"},
+		rule{c.Ensure == 0 || t.asked(c.Ensure), "closing waits for an ask never issued"},
 	)
 }
 
@@ -121,5 +122,6 @@ func (t Task) validateEnded(e Ended) error {
 		rule{e.Outcome.Valid(), "unknown outcome"},
 		rule{!e.At.IsZero(), "ended without a time"},
 		rule{!e.BoxKept || e.Outcome == OutcomeFailed && t.Kind.SavesTemplate(), "box kept on a run that does not save a template"},
+		rule{e.Ensure == 0 || t.asked(e.Ensure), "ended waits for an ask never issued"},
 	)
 }

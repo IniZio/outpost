@@ -15,7 +15,7 @@ func (x *tx) close(want Outcome, reason string) {
 	ask := x.newAsk()
 	x.t.Life = Closing{
 		Want: want, Reason: reason, From: x.t.Status(), Step: CloseSummary,
-		Ask: ask, Until: x.now.Add(x.p.CloseGrace), Summary: a.Summary,
+		Ask: ask, Until: x.now.Add(x.p.CloseGrace), Summary: a.Summary, Ensure: a.Asks[AskEnsure].ID,
 	}
 	x.emit(ReadSummary{Ask: ask})
 }
@@ -98,6 +98,7 @@ func (x *tx) onTemplate(ev TemplateSaved) {
 func (x *tx) end(c Closing, boxKept bool) {
 	e := Ended{
 		Outcome: c.Want, At: x.now, Error: c.Reason, Summary: c.Summary, BoxKept: boxKept,
+		Ensure: c.Ensure,
 	}
 	if x.p.KeepFinished > 0 {
 		e.ReleaseAt = x.now.Add(x.p.KeepFinished)

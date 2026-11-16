@@ -67,7 +67,7 @@ func TestAWakeBuffersWhatTheNewAgentReportsBeforeTheAnswer(t *testing.T) {
 func TestAFailedWakeGivesTheEndedRunBack(t *testing.T) {
 	r := stopped(t)
 	r.apply(domain.UserMessage{By: owner, Text: "carry on"})
-	r.apply(domain.Ensured{Ask: latest[domain.EnsureRunning](r).Ask, Err: "disk full"})
+	requireBoxStopped(t, r.apply(domain.Ensured{Ask: latest[domain.EnsureRunning](r).Ask, Err: "disk full"}))
 
 	r.want(domain.StatusStopped)
 	ended, ok := r.task.Life.(domain.Ended)

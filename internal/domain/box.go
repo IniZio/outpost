@@ -91,13 +91,72 @@ func (x *tx) onSleepDue() {
 
 // onEnsured handles the answer to EnsureRunning, for a replaced box, a woken box, or a resume.
 func (x *tx) onEnsured(ev Ensured) {
-	switch x.t.Life.(type) {
+	switch l := x.t.Life.(type) {
 	case Starting:
 		x.ensuredWake(ev)
 	case Active:
 		x.ensuredBox(ev)
-	case Queued, Closing, Ended:
+	case Closing:
+		x.ensuredClosing(l, ev)
+	case Ended:
+		x.ensuredEnded(l, ev)
+	case Queued:
 		x.drop(DropStaleLife)
+	}
+}
+
+// ensuredClosing takes the answer to a wake the finish window overtook. The window wants the box
+// up, so there is nothing to undo yet; end stops the box.
+func (x *tx) ensuredClosing(c Closing, ev Ensured) {
+	if !x.orphan(c.Ensure, ev.Ask) {
+		return
+	}
+	c.Ensure = 0
+	x.t.Life = c
+}
+
+// ensuredEnded takes the answer to a wake the run ended during. The box may have started after
+// it was stopped, so it is put back the way Ended wants it.
+func (x *tx) ensuredEnded(e Ended, ev Ensured) {
+	if !x.orphan(e.Ensure, ev.Ask) {
+		return
+	}
+	e.Ensure = 0
+	x.t.Life = e
+	x.restoreBox()
+}
+
+// orphan reports whether ask answers the EnsureRunning a finished run is still waiting for.
+func (x *tx) orphan(want, ask AskID) bool {
+	switch {
+	case want == 0:
+		x.drop(DropStaleLife)
+	case want != ask:
+		x.drop(DropStaleAsk)
+	default:
+		return true
+	}
+	return false
+}
+
+// unwake gives a wake's Ended back. EnsureRunning may have started the box before it failed or was
+// abandoned, so the box is put back the way Ended wants it. pending is the EnsureRunning still in
+// flight, if any.
+func (x *tx) unwake(s Starting, pending AskID) {
+	e := *s.Resume
+	e.Ensure = pending
+	x.t.Life = e
+	x.restoreBox()
+}
+
+// restoreBox emits what returns an ended task's box to its intended state.
+func (x *tx) restoreBox() {
+	switch x.t.BoxWant() {
+	case BoxStopped:
+		x.emit(StopBox{})
+	case BoxReleased:
+		x.emit(Release{})
+	case BoxNone, BoxUp, BoxAsleep, BoxReplacing, BoxWaking:
 	}
 }
 
@@ -108,7 +167,7 @@ func (x *tx) ensuredWake(ev Ensured) {
 		return
 	}
 	if ev.Err != "" {
-		x.t.Life = *s.Resume
+		x.unwake(s, 0)
 		x.note(EntryError, "Could not wake the task: "+ev.Err)
 		return
 	}

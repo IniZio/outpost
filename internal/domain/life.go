@@ -86,7 +86,8 @@ const (
 
 // Closing is the finish window. Every path that ends a run enters it, so a second finish finds
 // Closing and is dropped. From is the status shown during the window, so users see no new status.
-// Until bounds the wait for the answer.
+// Until bounds the wait for the answer. Ensure is an EnsureRunning that was in flight when the run
+// began to finish; it is carried into Ended so its late answer can stop the box again.
 type Closing struct {
 	Want    Outcome
 	Reason  string
@@ -95,11 +96,14 @@ type Closing struct {
 	Ask     AskID
 	Until   time.Time
 	Summary string
+	Ensure  AskID
 }
 
 // Ended is a finished run. It is resumable until IsReleased. BoxKept is set on a setup task
 // whose template save failed: its box keeps running so the save can be retried. ReleaseAt is when
 // the box and desk get cleaned up. ReleasedAt stays zero until then, and after it no resume works.
+// Ensure is an EnsureRunning still in flight when the run ended. Its answer may mean the box was
+// started after Outpost stopped it, so that answer puts the box back the way Ended wants it.
 type Ended struct {
 	Outcome    Outcome
 	At         time.Time
@@ -108,6 +112,7 @@ type Ended struct {
 	BoxKept    bool
 	ReleaseAt  time.Time
 	ReleasedAt time.Time
+	Ensure     AskID
 }
 
 // releasable reports whether a release is still due: it is scheduled and has not happened.
