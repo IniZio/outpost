@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels: {{- include "outpost.labels" . | nindent 4 }}
+spec:
+  # One leader at a time holds the store lease. The surge pod is ready as a standby, and the old
+  # pod drains its links on SIGTERM, so the lease and the machine links hand over.
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: {{- include "outpost.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "outpost.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "outpost.env" . | sha256sum }}
+        {{- if .Values.proxy.url }}
+        checksum/ca: {{ .Values.proxy.caPem | sha256sum }}
+        {{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ add (int .Values.drainSeconds) 30 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        - name: migrate
+          image: {{ include "outpost.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [migrate]
+          envFrom: [{ secretRef: { name: {{ include "outpost.secretName" . }} } }]
+          env: {{- include "outpost.env" . | nindent 12 }}
+          {{- if .Values.proxy.url }}
+          volumeMounts: [{ name: proxy-ca, mountPath: /etc/outpost/proxy, readOnly: true }]
+          {{- end }}
+          securityContext: &sec
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      containers:
+        - name: outpost
+          image: {{ include "outpost.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [serve]
+          envFrom: [{ secretRef: { name: {{ include "outpost.secretName" . }} } }]
+          env:
+            # The init container migrated already.
+            - { name: OUTPOST_MIGRATE, value: "false" }
+            {{- include "outpost.env" . | nindent 12 }}
+          ports:
+            - { name: http, containerPort: {{ .Values.service.port }} }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            failureThreshold: 6
+          securityContext: *sec
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.proxy.url }}
+          volumeMounts: [{ name: proxy-ca, mountPath: /etc/outpost/proxy, readOnly: true }]
+          {{- end }}
+      {{- if .Values.proxy.url }}
+      volumes:
+        - name: proxy-ca
+          configMap: { name: {{ .Release.Name }}-proxy-ca }
+      {{- end }}

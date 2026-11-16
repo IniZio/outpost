@@ -7,10 +7,10 @@ TYPOS ?= typos
 
 PG_IMAGE := postgres:17
 
-.PHONY: help setup lint audit test test-pg ci build hc-golden it it-sweep tools-image proxy-image
+.PHONY: help setup lint audit chart test test-pg ci build hc-golden it it-sweep tools-image proxy-image
 
 help:
-	@echo "targets: setup lint audit test test-pg ci build hc-golden it tools-image proxy-image"
+	@echo "targets: setup lint audit chart test test-pg ci build hc-golden it tools-image proxy-image"
 
 setup:
 	@go version | grep -q 'go$(GO_VERSION) ' || { echo "setup: need Go $(GO_VERSION) (mise install)"; exit 1; }
@@ -80,7 +80,25 @@ PROXY_IMAGE ?= ob-proxy:dev
 proxy-image:
 	docker build -q -t $(PROXY_IMAGE) images/proxy
 
-ci: lint audit test build
+CHART := deploy/helm/outpost
+CHART_VALUES := -f deploy/helm/test-values.yaml
+CHART_KEYS := host baseImage secrets.databaseUrl secrets.secretKey secrets.proxyToken proxy.caPem
+
+chart:
+	@command -v helm >/dev/null || { echo "chart: helm is not installed (mise install)"; exit 1; }
+	helm lint --strict $(CHART) $(CHART_VALUES)
+	helm lint --strict $(CHART) $(CHART_VALUES) -f deploy/helm/full-values.yaml
+	helm template outpost $(CHART) $(CHART_VALUES) | grep -q 'maxUnavailable: 0'
+	helm template outpost $(CHART) $(CHART_VALUES) | grep -q 'args: \[migrate\]'
+	! helm template outpost $(CHART) $(CHART_VALUES) | grep -q secretName
+	helm template outpost $(CHART) $(CHART_VALUES) -f deploy/helm/full-values.yaml | grep -q 'proxy-buffering'
+	helm template outpost $(CHART) $(CHART_VALUES) --set secrets.existingSecret=mine | grep -q 'name: mine'
+	@for k in $(CHART_KEYS); do \
+		out=$$(helm template outpost $(CHART) $(CHART_VALUES) --set $$k= 2>&1) && { echo "chart: empty $$k rendered"; exit 1; }; \
+		echo "$$out" | grep -q "$$k is required" || { echo "chart: empty $$k does not name the key"; exit 1; }; \
+	done
+
+ci: lint audit test chart build
 
 build:
 	go build -o bin/ ./cmd/...

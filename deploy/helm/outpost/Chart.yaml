@@ -1,0 +1,10 @@
+apiVersion: v2
+name: outpost
+description: The Outpost server. Postgres is external; machines run the agent and the credential proxy.
+type: application
+home: https://github.com/IniZio/outpost
+sources:
+  - https://github.com/IniZio/outpost
+# CI sets both to the release version when it packages the chart.
+version: 0.0.0
+appVersion: "0.0.0"

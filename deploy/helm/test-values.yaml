@@ -1,0 +1,8 @@
+host: outpost.example.com
+baseImage: ghcr.io/example/box:latest
+secrets:
+  databaseUrl: postgres://outpost:pw@db.example.com:5432/outpost
+  secretKey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+  proxyToken: 0123456789abcdef0123
+proxy:
+  caPem: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"

@@ -1,0 +1,7 @@
+allowedLogins: alice,bob
+maxRunning: 4
+drainSeconds: 90
+claude: { model: sonnet, bin: "", marketplaces: example/market, plugins: tool@market }
+ingress: { className: nginx, annotations: { example.com/extra: "1" } }
+extraEnv: { OUTPOST_EXAMPLE: "1" }
+imagePullSecrets: [{ name: pull }]

@@ -1,0 +1,68 @@
+# Required: host, baseImage, and either secrets.existingSecret or the three secrets below.
+
+# The public host name. The server's URL is https://<host> and agents dial wss://<host>/machines/link.
+host: ""
+
+image:
+  repository: ghcr.io/inizio/outpost
+  # Empty is the chart's appVersion, so a release pins chart and image together.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The image every box starts from (OUTPOST_BASE_IMAGE).
+baseImage: ""
+# GitHub logins allowed to sign in, comma separated (OUTPOST_ALLOWED_LOGINS).
+allowedLogins: ""
+maxRunning: 2
+log: info
+# The drain budget on stop. The pod's grace period is this plus 30 s.
+drainSeconds: 60
+
+claude:
+  model: ""
+  bin: ""
+  marketplaces: ""
+  plugins: ""
+
+secrets:
+  # A Secret holding OUTPOST_DATABASE_URL, OUTPOST_SECRET_KEY and OUTPOST_PROXY_TOKEN. When set,
+  # the chart makes no Secret and the three values below are ignored.
+  existingSecret: ""
+  # postgres://user:pass@host:5432/outpost
+  databaseUrl: ""
+  # Base64 of 32 bytes; `outpost key` prints one. Secrets are sealed with it: keep it safe.
+  secretKey: ""
+  # At least 16 characters. The proxy on each machine presents it when it pulls grants.
+  proxyToken: ""
+
+# The credential proxy is on each machine, so boxes dial it by the name stack.sh gives it. Empty
+# url runs boxes with no credentials. caPem is the proxy's public CA (mitmproxy-ca-cert.pem), which
+# the server hands to boxes; every machine's proxy must use the same CA.
+proxy:
+  url: http://ob-proxy:8080
+  caPem: ""
+
+# Any further OUTPOST_* setting, as name: value.
+extraEnv: {}
+
+service:
+  port: 7400
+
+# The machine link is a WebSocket held open for hours, and the watch stream is SSE, so the
+# controller must not time out idle upgrades or buffer. Traefik (the default) does neither.
+# The nginx class gets the matching annotations below; anything else sets them in annotations.
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  # TLS with the cluster's default certificate: no secretName, by cluster rule.
+  tls: true
+
+# The namespace's default limit is 256Mi, so the memory limit is set explicitly.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
