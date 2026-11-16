@@ -13,6 +13,7 @@ import { closeTerm, openTerm, termMessage, type TermData } from "./term.ts";
 import { db, type User } from "./db.ts";
 import { ensureImages, whenImagesReady } from "./images.ts";
 import { detectLocalLogin } from "./local.ts";
+import * as proxy from "./proxy.ts";
 
 type EventsData = { kind: "events"; user: User; unsub?: () => void };
 type WsData = TermData | EventsData;
@@ -69,11 +70,14 @@ void ensureImages();
 console.log(`task network MTU ${await dk.ensureNetwork()}`);
 await detectLocalLogin();
 await tasks.recover();
+proxy.writePolicy();
+proxy.followEvents();
 startScheduler();
 setInterval(() => void tasks.gc(), 15 * 60_000);
 setInterval(() => {
   tasks.schedule();
   void tasks.sleepIdle();
+  proxy.writePolicy();
 }, 30_000);
 
 async function localUser(): Promise<User | null> {

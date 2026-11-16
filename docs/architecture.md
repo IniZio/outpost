@@ -36,6 +36,15 @@ hc reports the agent's state (`working`, `idle`, `done`, `blocked`, `error`) fro
 - An interactive task waits for its requester.
 - A task left waiting puts its box to sleep after 30 minutes. A message wakes the box.
 
+## GitHub credentials
+
+The `outpost-proxy` container runs mitmproxy with an Outpost addon. It is a separate container, so tasks keep their network while the server restarts.
+
+- The server writes the proxy's policy file. It holds each live task's proxy login, repos and mode, and each user's token.
+- The desk and box reach the proxy through `HTTPS_PROXY`. They trust its CA, and they hold only a placeholder `GH_TOKEN`.
+- The proxy opens TLS only for github.com, api.github.com and uploads.github.com. It replaces the placeholder with the real token when the policy allows the request. Everything else is a plain tunnel.
+- Refusals and each task's hosts go to an events file. The server copies them into the timeline and `task_hosts`.
+
 ## Host notes
 
 On hosts that route GitHub through Tailscale, the route MTU is 1280. Containers on Docker's default 1500 MTU then hang in TLS handshakes. The server creates the `outpost` network with the smallest MTU on the host's routes and passes it to the box's inner dockerd. Image builds use the host network.

@@ -59,7 +59,7 @@ export async function ensureNetwork() {
   return networkMtu;
 }
 
-export async function createDesk(taskId: number, c: Computer, env: Record<string, string>) {
+export async function createDesk(taskId: number, c: Computer, env: Record<string, string>, proxyCa: string | null) {
   await run(["docker", "rm", "-f", c.desk]);
   await must([
     "docker", "run", "-d", "--name", c.desk, "--hostname", "desk",
@@ -77,6 +77,10 @@ export async function createDesk(taskId: number, c: Computer, env: Record<string
     "mkdir -p /run/outpost/ssh /run/outpost/tmp /run/outpost/artifacts /var/lib/outpost-hc/config/herdr-core && rm -f /run/outpost/box-ready && " +
     "echo 'notes = false' > /var/lib/outpost-hc/config/herdr-core/config.toml && " +
     "[ -f /run/outpost/ssh/id ] || ssh-keygen -q -t ed25519 -N '' -f /run/outpost/ssh/id"]);
+  if (proxyCa) {
+    await must(["docker", "exec", "-i", c.desk, "sh", "-c",
+      "cat > /usr/local/share/ca-certificates/outpost-proxy.crt && update-ca-certificates >/dev/null"], { input: proxyCa });
+  }
 }
 
 export async function writeRunFile(c: Computer, path: string, content: string) {
@@ -143,7 +147,7 @@ const SEED = "/opt/outpost/seed";
 
 export async function commitBox(c: Computer, image: string) {
   await must(["docker", "exec", c.box, "sh", "-c",
-    `rm -rf ${SEED} && mkdir -p ${SEED} && ` +
+    `rm -rf ${SEED} /etc/profile.d/00-outpost.sh && mkdir -p ${SEED} && ` +
     `if docker info >/dev/null 2>&1; then imgs=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>'); ` +
     `if [ -n "$imgs" ]; then docker save $imgs -o ${SEED}/images.tar; fi; fi && ` +
     `cp -a /workspace ${SEED}/workspace`], { timeoutMs: 30 * 60_000 });

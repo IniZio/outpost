@@ -3,8 +3,9 @@ set -eu
 run=/run/outpost
 
 # ssh sessions don't inherit the container's environment; login shells read this.
-env | grep -E '^(GH_TOKEN|GITHUB_TOKEN|OUTPOST_[A-Z_]+|ANDROID_[A-Z_]+|JAVA_HOME|TZ|LANG)=' \
+env | grep -E '^(GH_TOKEN|GITHUB_TOKEN|OUTPOST_[A-Z_]+|ANDROID_[A-Z_]+|JAVA_HOME|TZ|LANG|HTTPS?_PROXY|https?_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|NODE_USE_ENV_PROXY|NODE_EXTRA_CA_CERTS|REQUESTS_CA_BUNDLE)=' \
   | sed "s/'/'\\\\''/g; s/=\(.*\)/='\1'/; s/^/export /" > /etc/profile.d/00-outpost.sh || true
+chmod 600 /etc/profile.d/00-outpost.sh
 
 if [ -d "$run/files" ]; then
   (cd "$run/files" && find . -type f) | while read -r f; do
@@ -12,6 +13,7 @@ if [ -d "$run/files" ]; then
     case "$dest" in */.ssh/*) chmod 600 "$dest" ;; esac
   done
 fi
+if [ -f /usr/local/share/ca-certificates/outpost-proxy.crt ]; then update-ca-certificates >/dev/null 2>&1 || true; fi
 
 if [ -w /sys/fs/cgroup ] && command -v dockerd >/dev/null; then
   mtu=${OUTPOST_MTU:-1500}

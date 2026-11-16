@@ -87,10 +87,25 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
 );
 `);
 
-for (const [col, type] of [["mac_target", "TEXT"], ["mac_pubkey", "TEXT"]] as const) {
-  const cols = db.query<{ name: string }, []>("PRAGMA table_info(users)").all().map((c) => c.name);
-  if (!cols.includes(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
+for (const [table, col, type] of [
+  ["users", "mac_target", "TEXT"],
+  ["users", "mac_pubkey", "TEXT"],
+  ["tasks", "proxy_mode", "TEXT"],
+  ["tasks", "proxy_secret", "TEXT"],
+] as const) {
+  const cols = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
 }
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS task_hosts (
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL,
+  first_at INTEGER NOT NULL,
+  PRIMARY KEY (task_id, host, port)
+);
+`);
 
 export type User = {
   id: number;
@@ -123,6 +138,8 @@ export type Task = {
   started_at: number | null;
   finished_at: number | null;
   released_at: number | null;
+  proxy_mode: "audit" | "enforce" | null;
+  proxy_secret: string | null;
 };
 
 export type TaskStatus = "queued" | "starting" | "working" | "waiting" | "done" | "failed" | "stopped";

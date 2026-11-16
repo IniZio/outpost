@@ -40,7 +40,8 @@ function ownTask(user: User, id: string): Task {
 
 function taskView(t: Task) {
   const wfName = t.workflow_id ? db.query<{ name: string }, [number]>("SELECT name FROM workflows WHERE id = ?").get(t.workflow_id)?.name : null;
-  return { ...t, also: JSON.parse(t.also), workflow: wfName ?? null };
+  const { proxy_secret: _secret, ...shown } = t;
+  return { ...shown, also: JSON.parse(t.also), workflow: wfName ?? null };
 }
 
 route("GET", "/api/tasks", ({ user, url }) => {

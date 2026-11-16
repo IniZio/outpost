@@ -8,6 +8,7 @@ import * as dk from "./compute/docker.ts";
 import { run, shq } from "./sh.ts";
 import { hostClaudeToken } from "./local.ts";
 import { imageBuild } from "./images.ts";
+import * as proxy from "./proxy.ts";
 
 const AGENT = "agent";
 export const machineOf = (id: number) => `task-${id}`;
@@ -56,7 +57,7 @@ export function createTask(input: {
   const title = input.title ?? firstLine(input.prompt);
   const r = db
     .query(
-      "INSERT INTO tasks (user_id, kind, title, repo, also, prompt, workflow_id, timeout_min, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?) RETURNING id",
+      "INSERT INTO tasks (user_id, kind, title, repo, also, prompt, workflow_id, timeout_min, status, created_at, proxy_mode, proxy_secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?) RETURNING id",
     )
     .get(
       input.user.id,
@@ -68,6 +69,8 @@ export function createTask(input: {
       input.workflowId ?? null,
       input.timeoutMin ?? null,
       now(),
+      config.ghProxy === "off" ? null : config.ghProxy,
+      config.ghProxy === "off" ? null : proxy.newSecret(),
     ) as { id: number };
   taskEvent(r.id, "queued", input.kind === "setup" ? `Preparing ${input.repo}` : "Queued");
   queueMicrotask(schedule);
@@ -112,7 +115,16 @@ const AGENT_ENV = ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"];
 
 function boxSpecFor(task: Task, user: User): dk.BoxSpec {
   const { env, files } = secretsOf(user);
-  const boxEnv = { GH_TOKEN: user.gh_token, OUTPOST_TASK: String(task.id), OUTPOST_REPO: task.repo, ...Object.fromEntries(Object.entries(env).filter(([k]) => !AGENT_ENV.includes(k))) };
+  const boxEnv = {
+    GH_TOKEN: user.gh_token,
+    OUTPOST_TASK: String(task.id),
+    OUTPOST_REPO: task.repo,
+    ...Object.fromEntries(Object.entries(env).filter(([k]) => !AGENT_ENV.includes(k))),
+  };
+  if (task.proxy_secret) {
+    Object.assign(boxEnv, proxy.proxyEnv(task));
+    files[proxy.CA_PATH] = proxy.caPem();
+  }
   const devices = withKvm(JSON.parse(getRepo(task.repo).devices));
   if (user.mac_target && files["/root/.ssh/outpost_mac"]) {
     const [macUser, macHost] = user.mac_target.split("@");
@@ -139,6 +151,7 @@ async function start(task: Task) {
   const c = dk.names(task.id, user.login);
   const { env } = secretsOf(user);
   const agentEnv: Record<string, string> = { GH_TOKEN: user.gh_token, OUTPOST_TASK: String(task.id), OUTPOST_REPO: task.repo };
+  if (task.proxy_secret) Object.assign(agentEnv, proxy.proxyEnv(task));
   for (const [k, v] of Object.entries(env)) if (AGENT_ENV.includes(k)) agentEnv[k] = v;
   if (!AGENT_ENV.some((k) => agentEnv[k])) {
     const host = await hostClaudeToken(user.login);
@@ -151,7 +164,13 @@ async function start(task: Task) {
   try {
     setStatus(task.id, "starting", { started_at: now(), image, phase: "Preparing the computer" });
     taskEvent(task.id, "phase", repo.ready_image && task.kind !== "setup" ? `Starting from ${task.repo}'s ready image` : "Starting a fresh computer");
-    await dk.createDesk(task.id, c, agentEnv);
+    if (task.proxy_secret) {
+      await proxy.ensureProxy();
+      taskEvent(task.id, "phase", task.proxy_mode === "enforce"
+        ? "GitHub writes are limited to this task's repos"
+        : "GitHub writes outside this task's repos are logged (audit mode)");
+    }
+    await dk.createDesk(task.id, c, agentEnv, task.proxy_secret ? proxy.caPem() : null);
 
     if (image !== config.boxImage) {
       update(task.id, { phase: "Copying the ready workspace" });
@@ -227,6 +246,9 @@ function buildPrompt(task: Task, repo: Repo, devices: string[]) {
       ? `For iOS, a Mac with Xcode is reachable as \`ssh mac\` (other tasks may share it). Work in ~/outpost/task-${task.id} there (rsync the repo over, excluding node_modules, Pods and build output), and give this task its own simulator with \`xcrun simctl clone\` of an existing device instead of creating one from scratch; delete your clone when done.`
       : "",
     "GitHub access uses the requester's identity through `gh` and git; push branches and open PRs with it.",
+    task.proxy_secret
+      ? "HTTP(S) goes through Outpost's proxy (HTTPS_PROXY); keep it set. GitHub writes work only on this task's repos. If GitHub answers `credential_withheld`, report it; don't work around it."
+      : "",
     "Put screenshots, logs and other proof you want the requester to see in /run/outpost/artifacts/.",
     repo.notes ? `\nNotes from preparing this repo's computer:\n${repo.notes.trim()}\n` : "",
   ];

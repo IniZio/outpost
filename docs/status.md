@@ -26,21 +26,23 @@ Nothing is declared in the client repo. That was deliberate. moor's `.moor.yaml`
 | Workspace state such as `node_modules`, `.venv` and `.env` | Inside the ready image (`/opt/outpost/seed/workspace`) | Copied into the task's workspace volume, then `git fetch`, then `checkout -f -B <default>`, then `clean -fd`. |
 | The agent's own setup (AGENTS.md, skills, plugins, model) | The user's **profile repo** (Settings → Profile), applied by `images/desk/outpost-profile` | Reads `outpost-profile.yaml` or `moor-profile.yaml` (`claude.model`, `claude.env`, `claude.marketplaces`, `claude.plugins`), plus `AGENTS.md`, `skills/`, `claude/settings.json` and `setup.sh`. It is applied once per profile commit, per user home volume. |
 | Secrets | `secrets` table, per user (Settings → Secrets) | A secret without a path becomes an env var in the box. A secret with a path becomes a file. Claude credentials go to the desk only. |
-| GitHub access | The user's own `gh` token, from sign-in | Passed as `GH_TOKEN` to the desk and the box. `gh auth setup-git` runs in both. Commits use the user's GitHub noreply address. |
+| GitHub access | The user's `gh` token, held by the proxy | Tasks get a placeholder `GH_TOKEN` and their own proxy login. The proxy swaps in the real token. It allows reads on any repo and writes only on the task's repos. The rules are in the proxy image's policy.py. `OUTPOST_GH_PROXY` is `enforce` (default), `audit` or `off`. Audit logs what enforce would refuse. Each task keeps the mode it was created with. Commits use the user's GitHub noreply address. |
 | Mac for iOS | `users.mac_target` plus a per-user key (secret `OUTPOST_MAC_KEY`) | Writes `Host mac` into the box's ssh config. The user adds the public key to the Mac once; Settings → Mac has a Test button. |
 | Devices | `repos.devices`, plus automatic KVM detection | `android` is added when `/dev/kvm` exists. `ios` is added when a Mac is set up. |
 | Resource limits | Environment variables `OUTPOST_BOX_MEMORY` (16g) and `OUTPOST_DESK_MEMORY` (3g); `OUTPOST_MAX_RUNNING` | No CPU or disk limits. |
 | Schedules | `workflows` table (Schedules page, or imported from moor) | Fields: name, cron, time zone, repos, also, prompt, `timeout_min`, enabled. A schedule makes one task per repo and run. |
-| Network | The `outpost` Docker network, with the host's route MTU | **No egress rules at all.** See the gaps below. |
+| Network | The `outpost` Docker network, with the host's route MTU | Proxy-aware tools go through the proxy. It refuses private addresses. It logs each task's hosts in `task_hosts`. Nothing else is blocked, and tools that ignore `HTTPS_PROXY` go direct. See the gaps below. |
 
 ## Known gaps
 
 Most important first:
 
-1. **No egress control, and no credential scoping.** The box can reach the whole internet. It holds the user's full `gh` token. So an agent can read or push to any repo the user can, not only the task's repos. moor had a proxy that gave out credentials only for the listed repos. It refused the rest with `credential_withheld`. Outpost has nothing like that yet. Options:
-   - A per-task egress proxy with allow and deny lists, such as Squid or mitmproxy in the desk's network namespace.
-   - A short-lived, fine-grained token per task.
-   - Both.
+1. **Egress is open, and reads aren't scoped.** The token no longer enters the task (see GitHub access), and writes are limited to the task's repos. Still open:
+   - The agent can read any repo the user can, and the internet is open, so it could copy private code out.
+   - The next step is to put the desk on an `--internal` network, so the proxy is the only way out. Then switch to an allow list built from `task_hosts`.
+   - Before that, three things must learn to use the proxy. Java and Gradle need `JAVA_TOOL_OPTIONS`. Nested Docker builds need proxy settings in the Docker client config, on port 8081, which doesn't open TLS. Ssh to the Mac needs a `ProxyCommand` through CONNECT.
+   - Ready images made before the proxy hold the real token in a committed `/etc/profile.d/00-outpost.sh` layer. New ones don't. Re-prepare or flatten the old ones.
+   - Short-lived GitHub App tokens per task would also narrow reads. That needs an App installed on the org.
 2. **Setup can't be reproduced.** A ready image is an opaque snapshot. If it is lost, or the base image changes, the only fix is to run Prepare again. Then you hope the agent does the same thing. The notes describe the setup but can't be replayed. One idea is to have Prepare also write a replayable setup script. It would live in Outpost, not in the repo, and Outpost could rebuild the image from it.
 3. **Ready images go stale.** Nothing refreshes them, or warns when the base box image or the repo's toolchain files change. Today, buildx was patched into every ready image by hand after it was added to the base image.
 4. **No CPU or disk limits, and no disk housekeeping.** Ready images are 6 to 38 GB each. Finished tasks keep their containers and volumes for `OUTPOST_KEEP_HOURS` (24).

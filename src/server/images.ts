@@ -25,6 +25,7 @@ export async function ensureImages() {
   const todo = [
     { image: config.boxImage, dir: "box", label: "the box (task computer)" },
     { image: config.deskImage, dir: "desk", label: "the desk (agent)" },
+    { image: config.proxyImage, dir: "proxy", label: "the GitHub credential proxy" },
   ];
   const stale = [];
   for (const t of todo) {
