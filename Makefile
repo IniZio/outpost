@@ -7,10 +7,10 @@ TYPOS ?= typos
 
 PG_IMAGE := postgres:17
 
-.PHONY: help setup lint audit test test-pg ci build
+.PHONY: help setup lint audit test test-pg ci build hc-golden
 
 help:
-	@echo "targets: setup lint audit test test-pg ci build"
+	@echo "targets: setup lint audit test test-pg ci build hc-golden"
 
 setup:
 	@go version | grep -q 'go$(GO_VERSION) ' || { echo "setup: need Go $(GO_VERSION) (mise install)"; exit 1; }
@@ -19,9 +19,10 @@ setup:
 	@git config core.hooksPath .githooks
 	@echo "setup: Go $(GO_VERSION), pinned tools and the pre-push hook present"
 
+# Lint also reads the files behind build tags, so the opt-in tests cannot rot unseen.
 lint:
 	$(TOOL) golangci-lint fmt --diff ./...
-	$(TOOL) golangci-lint run ./...
+	$(TOOL) golangci-lint run --build-tags docker,hcgolden ./...
 	$(TYPOS)
 
 audit:
@@ -42,6 +43,10 @@ test-pg:
 	until docker exec $$c pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; do sleep 0.5; done; \
 	OUTPOST_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:$$port/postgres \
 		go test -race -cover -count=1 ./internal/store/...
+
+# hc-golden records the real hc's answers into internal/hc/testdata. Run it after an hc upgrade.
+hc-golden:
+	go test -tags hcgolden -run TestRecordTranscripts -count=1 ./internal/hc/
 
 ci: lint audit test build
 

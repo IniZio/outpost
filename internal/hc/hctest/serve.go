@@ -1,0 +1,195 @@
+package hctest
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+
+	"github.com/IniZio/outpost/internal/hc"
+)
+
+type request struct {
+	ID     uint64          `json:"id"`
+	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
+}
+
+type rpcError struct {
+	Kind    string
+	Message string
+}
+
+type target struct {
+	Terminal string `json:"terminal"`
+	Force    bool   `json:"force"`
+	Text     string `json:"text"`
+}
+
+func (k *conn) serve() {
+	go k.writer()
+	defer k.close()
+	sc := bufio.NewScanner(k.pipe)
+	sc.Buffer(make([]byte, 64<<10), 16<<20)
+	for sc.Scan() {
+		var r request
+		if json.Unmarshal(sc.Bytes(), &r) != nil {
+			return
+		}
+		res, rerr := k.core.handle(k, r)
+		if !k.reply(r.ID, res, rerr) {
+			return
+		}
+	}
+}
+
+func (k *conn) reply(id uint64, res any, rerr *rpcError) bool {
+	msg := map[string]any{"jsonrpc": "2.0", "id": id}
+	if rerr != nil {
+		msg["error"] = map[string]any{"code": -32000, "message": rerr.Message, "data": map[string]string{"kind": rerr.Kind}}
+	} else {
+		msg["result"] = res
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return false
+	}
+	return k.enqueue(b)
+}
+
+func (k *conn) enqueue(b []byte) bool {
+	select {
+	case k.queue <- b:
+		return true
+	default:
+		go k.close() // a reader that fell this far behind is cut, as a stalled hc client would be
+		return false
+	}
+}
+
+func (k *conn) writer() {
+	for {
+		select {
+		case b := <-k.queue:
+			if _, err := k.pipe.Write(append(b, '\n')); err != nil {
+				k.close()
+				return
+			}
+		case <-k.done:
+			return
+		}
+	}
+}
+
+func (k *conn) close() {
+	k.once.Do(func() {
+		close(k.done)
+		_ = k.pipe.Close()
+		k.core.mu.Lock()
+		delete(k.core.conns, k)
+		k.core.mu.Unlock()
+	})
+}
+
+func (c *Core) handle(k *conn, r request) (any, *rpcError) {
+	if r.Method == "machine.exec" {
+		return c.execute(r.Params)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch r.Method {
+	case "hello":
+		return map[string]any{"generation": hc.Generation, "version": "hctest"}, nil
+	case "terminal.run":
+		var q hc.RunReq
+		_ = json.Unmarshal(r.Params, &q)
+		return c.addTerm(q)
+	case "terminal.list":
+		return c.list(r.Params), nil
+	case "events.subscribe":
+		return c.subscribe(k, r.Params), nil
+	}
+	return c.onTerminal(r)
+}
+
+func (c *Core) execute(params json.RawMessage) (any, *rpcError) {
+	var q hc.ExecReq
+	_ = json.Unmarshal(params, &q)
+	c.mu.Lock()
+	fn := c.exec
+	c.mu.Unlock()
+	return fn(q), nil
+}
+
+func (c *Core) list(params json.RawMessage) any {
+	var q struct {
+		All    bool              `json:"all"`
+		Labels map[string]string `json:"labels"`
+	}
+	_ = json.Unmarshal(params, &q)
+	out := []hc.Terminal{}
+	for _, t := range c.terms {
+		if (q.All || t.t.Live()) && matches(t.t.Labels, q.Labels) {
+			out = append(out, t.t)
+		}
+	}
+	return map[string]any{"terminals": out, "hidden_finished": 0}
+}
+
+func (c *Core) subscribe(k *conn, params json.RawMessage) any {
+	var q struct {
+		Labels map[string]string `json:"labels"`
+	}
+	_ = json.Unmarshal(params, &q)
+	k.sub = q.Labels
+	if k.sub == nil {
+		k.sub = map[string]string{}
+	}
+	out := []hc.Terminal{}
+	for _, t := range c.terms {
+		if matches(t.t.Labels, k.sub) {
+			out = append(out, t.t)
+		}
+	}
+	return map[string]any{"channel": nil, "seq": c.seq, "terminals": out}
+}
+
+// onTerminal serves the methods that name one terminal.
+func (c *Core) onTerminal(r request) (any, *rpcError) {
+	var q target
+	_ = json.Unmarshal(r.Params, &q)
+	t := c.find(q.Terminal)
+	if t == nil {
+		return nil, &rpcError{Kind: hc.KindNotFound, Message: fmt.Sprintf("no terminal %q", q.Terminal)}
+	}
+	switch r.Method {
+	case "terminal.get":
+		return t.t, nil
+	case "terminal.kill":
+		if t.t.Live() {
+			sig := 1 // hc kills with SIGHUP (transcript)
+			c.finish(t, nil, &sig, "killed")
+		}
+		return t.t, nil
+	case "terminal.send":
+		return c.sendTo(t, q)
+	case "terminal.interrupt":
+		t.intrs++
+		return map[string]any{"effect": "none"}, nil
+	}
+	return nil, &rpcError{Kind: "unknown_method", Message: r.Method}
+}
+
+func (c *Core) sendTo(t *term, q target) (any, *rpcError) {
+	switch {
+	case !t.t.Live():
+		return nil, &rpcError{Kind: "finished", Message: t.t.Address + " has finished"}
+	case t.t.Status != nil && t.t.Status.State == "blocked" && !q.Force:
+		return nil, &rpcError{Kind: "blocked", Message: t.t.Address + " is blocked"}
+	}
+	t.sent = append(t.sent, q.Text)
+	var status *string
+	if t.t.Status != nil {
+		status = &t.t.Status.State
+	}
+	return map[string]any{"started": nil, "status": status, "turn": 0}, nil
+}
