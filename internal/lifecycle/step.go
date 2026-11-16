@@ -110,16 +110,17 @@ func (r *Runner) attempt(ctx context.Context, c *cell, ev domain.Event, tpl *por
 	case res.Dropped != domain.Applied:
 		return t, true, nil
 	}
-	err = r.commit(ctx, c, t.Version, res, tpl)
+	err = r.commit(ctx, c, t.Version, res, ports.Commit{Template: tpl})
 	return res.Task, !errors.Is(err, ports.ErrConflict), err
 }
 
 // commit stores one Result and queues its effects on the lane. The caller holds c.apply, so the
 // lane order is the commit order.
-func (r *Runner) commit(ctx context.Context, c *cell, prev uint64, res domain.Result, tpl *ports.TemplateRow) error {
+// side carries the Commit's template and fire rows, when the event has one.
+func (r *Runner) commit(ctx context.Context, c *cell, prev uint64, res domain.Result, side ports.Commit) error {
 	items, rows := split(res)
 	ids, err := r.cfg.Store.Commit(ctx, ports.Commit{
-		Prev: prev, Task: res.Task.Record(), Entries: res.Timeline, Outbox: rows, Template: tpl,
+		Prev: prev, Task: res.Task.Record(), Entries: res.Timeline, Outbox: rows, Template: side.Template, Fire: side.Fire,
 	})
 	if err != nil {
 		return fmt.Errorf("lifecycle: commit task %d: %w", c.id, err)

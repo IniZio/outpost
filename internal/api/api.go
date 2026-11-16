@@ -17,6 +17,7 @@ import (
 	"github.com/IniZio/outpost/internal/auth"
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/lifecycle"
+	"github.com/IniZio/outpost/internal/schedule"
 )
 
 // Machines lists and revokes machines. cmd/outpost's adapter also kicks a revoked machine's link.
@@ -53,7 +54,9 @@ type Config struct {
 	Repos    Repos
 	// Secrets is nil until the secrets store is wired, and PUT /api/secrets answers 501.
 	Secrets Secrets
-	Clock   domain.Clock
+	// Schedules is nil when this server runs no schedules, and their routes answer 501.
+	Schedules *schedule.Service
+	Clock     domain.Clock
 	// PublicURL is where people reach the server, for sign-in links.
 	PublicURL string
 	Log       *slog.Logger
@@ -92,6 +95,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/repos", s.watch(s.repos))
 	m.HandleFunc("PUT /api/repos/{owner}/{name}", s.act(s.setRepo))
 	m.HandleFunc("PUT /api/secrets/{name}", s.act(s.setSecret))
+	s.scheduleRoutes()
 }
 
 type handler func(w http.ResponseWriter, r *http.Request, p auth.Principal) error
@@ -146,6 +150,7 @@ var problems = []problem{
 	{errWatchOnly, http.StatusForbidden, "watch_only"},
 	{domain.ErrForbidden, http.StatusForbidden, "forbidden"},
 	{lifecycle.ErrNotFound, http.StatusNotFound, "not_found"},
+	{schedule.ErrNotFound, http.StatusNotFound, "not_found"},
 	{errNotFound, http.StatusNotFound, "not_found"},
 	{domain.ErrUnknownPairing, http.StatusNotFound, "not_found"},
 	{domain.ErrUnknownMachine, http.StatusNotFound, "not_found"},
@@ -160,6 +165,7 @@ var problems = []problem{
 	{domain.ErrEnrollExpired, http.StatusGone, "expired"},
 	{domain.ErrTooManyPairings, http.StatusTooManyRequests, "rate_limited"},
 	{errNoSecrets, http.StatusNotImplemented, "not_built"},
+	{errNoSchedules, http.StatusNotImplemented, "not_built"},
 	{lifecycle.ErrNotLeading, http.StatusServiceUnavailable, "not_leading"},
 }
 

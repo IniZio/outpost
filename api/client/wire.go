@@ -141,3 +141,21 @@ type Error struct {
 }
 
 func (e *Error) Error() string { return fmt.Sprintf("%s (%d): %s", e.Code, e.Status, e.Message) }
+
+// Schedule is a recurring task. Cron has five fields, read in TZ. The Last fields and Next are
+// read-only: the server fills them.
+type Schedule struct {
+	Name        string     `json:"name"`
+	Cron        string     `json:"cron"`
+	TZ          string     `json:"tz"`
+	Repo        string     `json:"repo"`
+	Also        []string   `json:"also,omitempty"`
+	Prompt      string     `json:"prompt"`
+	Title       string     `json:"title,omitempty"`
+	TimeoutMin  int        `json:"timeout_min,omitempty"`
+	Enabled     bool       `json:"enabled"`
+	Next        *time.Time `json:"next,omitempty"`
+	LastDue     *time.Time `json:"last_due,omitempty"`
+	LastTask    int64      `json:"last_task,omitempty"`
+	LastSkipped *time.Time `json:"last_skipped,omitempty"`
+}

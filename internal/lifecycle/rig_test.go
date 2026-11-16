@@ -109,7 +109,7 @@ func (g *rig) created(kind domain.Kind) domain.TaskID {
 	if kind == domain.KindInteractive {
 		tk, err = g.r.Create(g.ctx, owner, kind, spec)
 	} else {
-		tk, err = g.r.Fire(g.ctx, domain.Schedule{ID: 1, Owner: owner, Kind: kind, Spec: spec, Enabled: true})
+		tk, err = g.r.Fire(g.ctx, domain.Schedule{ID: 1, Owner: owner, Kind: kind, Spec: spec, Enabled: true}, time.Time{})
 	}
 	if err != nil {
 		g.t.Fatal(err)

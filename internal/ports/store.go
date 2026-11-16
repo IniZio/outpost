@@ -51,13 +51,15 @@ type TemplateRow struct {
 
 // Commit is one applied event, written in one transaction: the task as a Record, its new timeline
 // entries, the outbox rows its effects produced in order, and a template row when the event was an
-// accepted save. Prev is the version the event was applied to. Zero inserts a new task.
+// accepted save, and a fire row when the event inserts the task a schedule's slot made. Prev is the
+// version the event was applied to. Zero inserts a new task.
 type Commit struct {
 	Prev     uint64
 	Task     domain.Record
 	Entries  []domain.Entry
 	Outbox   []OutboxRow
 	Template *TemplateRow
+	Fire     *FireRow
 }
 
 // MachineState is a machine row and whether it is linked now, from link.Presence's online flag.
@@ -89,7 +91,8 @@ type Store interface {
 	Load(ctx context.Context, id domain.TaskID) (domain.Task, error)
 
 	// Commit writes c atomically, compare-and-swap on c.Prev, and returns the ids it gave the
-	// outbox rows, in order. A version mismatch is ErrConflict and writes nothing.
+	// outbox rows, in order. A version mismatch is ErrConflict and writes nothing. A fire row whose
+	// slot already has one is ErrFired and writes nothing.
 	Commit(ctx context.Context, c Commit) ([]OutboxID, error)
 
 	// Tasks lists tasks for the API, newest first.

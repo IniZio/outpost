@@ -20,6 +20,8 @@ type StoreRig struct {
 	AddMachine func(m domain.Machine, online bool) domain.MachineID
 	// SetRepo adds or replaces a repo row.
 	SetRepo func(r domain.Repo)
+	// Schedules is the same store's schedules.
+	Schedules ports.Schedules
 }
 
 // StoreRigFor wraps the in-memory Store.
@@ -30,7 +32,8 @@ func StoreRigFor(s *Store) StoreRig {
 			s.AddMachine(m, online)
 			return m.ID
 		},
-		SetRepo: s.SetRepo,
+		SetRepo:   s.SetRepo,
+		Schedules: s,
 	}
 }
 
@@ -54,6 +57,7 @@ func StoreContract(t *testing.T, newRig func(t *testing.T) StoreRig) {
 		"TaskIDs":          contractTaskIDs,
 		"Lease":            contractLease,
 		"LeaseCancelledIn": contractLeaseCancel,
+		"Schedules":        contractSchedules,
 	}
 	for name, run := range cases {
 		t.Run(name, func(t *testing.T) {

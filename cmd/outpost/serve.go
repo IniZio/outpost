@@ -23,6 +23,7 @@ import (
 	"github.com/IniZio/outpost/internal/ops"
 	"github.com/IniZio/outpost/internal/ports"
 	"github.com/IniZio/outpost/internal/remote"
+	"github.com/IniZio/outpost/internal/schedule"
 	"github.com/IniZio/outpost/internal/secrets"
 	"github.com/IniZio/outpost/internal/store/postgres"
 )
@@ -35,6 +36,7 @@ type server struct {
 	store    *postgres.Store
 	hub      *link.Hub
 	runner   *lifecycle.Runner
+	sched    *schedule.Service
 	http     *http.Server
 	draining atomic.Bool
 	// base is every request's parent context. The drain cancels it, so event streams end and the
@@ -113,6 +115,7 @@ func (s *server) wire(ctx context.Context, key secrets.Key, clock domain.Clock) 
 	}
 	poke := s.runner.Poke
 	tap.poke.Store(&poke)
+	s.sched = schedule.New(schedule.Config{Store: s.store, Fire: s.runner.Fire, Clock: clock, Log: s.log})
 	s.base, s.cancelBase = context.WithCancel(context.WithoutCancel(ctx))
 	s.http = &http.Server{
 		Handler: s.routes(v, grants, clock), ReadHeaderTimeout: 10 * time.Second,
@@ -165,6 +168,7 @@ func (s *server) routes(v *secrets.Vault, grants http.Handler, clock domain.Cloc
 	mux.Handle("/", api.New(api.Config{
 		Tasks: s.runner, Auth: a, Clock: clock, PublicURL: s.cfg.PublicURL, Log: s.log,
 		Machines: machines{s.store, s.hub}, Pairing: pairing{s.store, s.hub}, Repos: s.store, Secrets: vault{v},
+		Schedules: s.sched,
 	}))
 	mux.Handle("GET /machines/link", s.linkHandler())
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -219,6 +223,7 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 	errs := make(chan error, 2)
 	var wg sync.WaitGroup
 	wg.Go(func() { errs <- s.runner.Run(runCtx) })
+	wg.Go(func() { _ = s.sched.Run(runCtx, s.runner.Started()) })
 	wg.Go(func() {
 		if err := s.http.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 			errs <- fmt.Errorf("http: %w", err)

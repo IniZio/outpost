@@ -162,6 +162,7 @@ linters:
             - github.com/IniZio/outpost/internal/auth
             - github.com/IniZio/outpost/internal/api
             - github.com/IniZio/outpost/internal/ports
+            - github.com/IniZio/outpost/internal/schedule
         agent-cmd:
           files: ["**/cmd/outpost-agent/**"]
           list-mode: lax

@@ -16,6 +16,7 @@ import (
 	"github.com/IniZio/outpost/internal/lifecycle"
 	"github.com/IniZio/outpost/internal/ports"
 	"github.com/IniZio/outpost/internal/ports/portstest"
+	"github.com/IniZio/outpost/internal/schedule"
 )
 
 // rig is the API over a leading Runner and the in-memory fakes, served by httptest.
@@ -50,6 +51,7 @@ func newRig(t *testing.T, opts ...option) *rig {
 	cfg := api.Config{
 		Tasks: runner, Auth: g.auth, Machines: machines{g.store}, Pairing: g.pairing, Repos: g.repos,
 		Secrets: g.secrets, Clock: domain.SystemClock{}, PublicURL: "http://outpost.test",
+		Schedules: schedule.New(schedule.Config{Store: g.store, Fire: runner.Fire}),
 	}
 	for _, o := range opts {
 		o(&cfg)

@@ -307,3 +307,33 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	var s Status
 	return s, c.do(ctx, http.MethodGet, "/api/status", nil, &s)
 }
+
+func schedulePath(name, rest string) string { return "/api/schedules/" + url.PathEscape(name) + rest }
+
+// Schedules lists the caller's schedules.
+func (c *Client) Schedules(ctx context.Context) ([]Schedule, error) {
+	var out []Schedule
+	return out, c.do(ctx, http.MethodGet, "/api/schedules", nil, &out)
+}
+
+// PutSchedule creates or replaces one of the caller's schedules by name.
+func (c *Client) PutSchedule(ctx context.Context, s Schedule) (Schedule, error) {
+	var out Schedule
+	return out, c.do(ctx, http.MethodPut, schedulePath(s.Name, ""), s, &out)
+}
+
+// SetScheduleEnabled turns a schedule on or off. Turning it on fires no slot already past.
+func (c *Client) SetScheduleEnabled(ctx context.Context, name string, on bool) (Schedule, error) {
+	verb := "/disable"
+	if on {
+		verb = "/enable"
+	}
+	var out Schedule
+	return out, c.do(ctx, http.MethodPost, schedulePath(name, verb), nil, &out)
+}
+
+// FireSchedule starts a schedule's task now, as its cron would but claiming no slot.
+func (c *Client) FireSchedule(ctx context.Context, name string) (Task, error) {
+	var t Task
+	return t, c.do(ctx, http.MethodPost, schedulePath(name, "/fire"), nil, &t)
+}

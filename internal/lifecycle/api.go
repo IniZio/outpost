@@ -33,11 +33,13 @@ func (r *Runner) Create(ctx context.Context, owner domain.Login, kind domain.Kin
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("lifecycle: %w", err)
 	}
-	return r.insert(ctx, res)
+	return r.insert(ctx, res, ports.Commit{})
 }
 
-// Fire creates the task one firing of a schedule makes. The schedule package's callback calls it.
-func (r *Runner) Fire(ctx context.Context, s domain.Schedule) (domain.Task, error) {
+// Fire creates the task one firing of a schedule makes, and claims the slot due in the same
+// commit, so a slot fires once: a slot already fired is ports.ErrFired. A zero due is a manual
+// firing, which claims no slot.
+func (r *Runner) Fire(ctx context.Context, s domain.Schedule, due time.Time) (domain.Task, error) {
 	id, err := r.cfg.Store.NewTaskID(ctx)
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("lifecycle: new task id: %w", err)
@@ -46,10 +48,14 @@ func (r *Runner) Fire(ctx context.Context, s domain.Schedule) (domain.Task, erro
 	if err != nil {
 		return domain.Task{}, fmt.Errorf("lifecycle: %w", err)
 	}
-	return r.insert(ctx, res)
+	var side ports.Commit
+	if !due.IsZero() {
+		side.Fire = &ports.FireRow{Schedule: s.ID, Due: due}
+	}
+	return r.insert(ctx, res, side)
 }
 
-func (r *Runner) insert(ctx context.Context, res domain.Result) (domain.Task, error) {
+func (r *Runner) insert(ctx context.Context, res domain.Result, side ports.Commit) (domain.Task, error) {
 	if !r.lead.Load() {
 		return domain.Task{}, ErrNotLeading
 	}
@@ -57,7 +63,7 @@ func (r *Runner) insert(ctx context.Context, res domain.Result) (domain.Task, er
 	defer r.release(c)
 	c.apply.Lock()
 	defer c.apply.Unlock()
-	if err := r.commit(ctx, c, 0, res, nil); err != nil {
+	if err := r.commit(ctx, c, 0, res, side); err != nil {
 		return domain.Task{}, err
 	}
 	return res.Task, nil

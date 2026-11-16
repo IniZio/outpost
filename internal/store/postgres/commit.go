@@ -30,18 +30,28 @@ func (s *Store) Commit(ctx context.Context, c ports.Commit) ([]ports.OutboxID, e
 		if c.Task.Version != c.Prev+1 {
 			return fmt.Errorf("postgres: record version %d does not follow %d", c.Task.Version, c.Prev)
 		}
-		if err := insertEntries(ctx, tx, c, first); err != nil {
-			return err
-		}
-		if ids, err = insertOutbox(ctx, tx, c); err != nil {
-			return err
-		}
-		return upsertTemplate(ctx, tx, c.Template)
+		ids, err = writeRows(ctx, tx, c, first)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	return ids, nil
+}
+
+// writeRows writes what a commit adds beside the task row.
+func writeRows(ctx context.Context, tx pgx.Tx, c ports.Commit, first int) ([]ports.OutboxID, error) {
+	if err := insertEntries(ctx, tx, c, first); err != nil {
+		return nil, err
+	}
+	ids, err := insertOutbox(ctx, tx, c)
+	if err != nil {
+		return nil, err
+	}
+	if err := insertFire(ctx, tx, c); err != nil {
+		return nil, err
+	}
+	return ids, upsertTemplate(ctx, tx, c.Template)
 }
 
 // writeTask inserts or updates the task row and returns the sequence number of the first new entry.

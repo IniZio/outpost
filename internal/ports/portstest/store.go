@@ -25,6 +25,8 @@ type Store struct {
 	nextID   domain.TaskID
 	nextRow  ports.OutboxID
 	lease    chan struct{}
+	scheds   []ports.ScheduleRow
+	slots    map[ports.FireRow]domain.TaskID
 
 	conflicts int
 	commitErr faults
@@ -54,6 +56,7 @@ func NewStore() *Store {
 		repos:    map[domain.RepoName]domain.Repo{},
 		machines: map[domain.MachineID]ports.MachineState{},
 		lease:    make(chan struct{}, 1),
+		slots:    map[ports.FireRow]domain.TaskID{},
 	}
 }
 
@@ -164,6 +167,12 @@ func (s *Store) Commit(_ context.Context, c ports.Commit) ([]ports.OutboxID, err
 	defer s.mu.Unlock()
 	if err := s.admit(c); err != nil {
 		return nil, err
+	}
+	if f := c.Fire; f != nil {
+		if _, ok := s.slots[slot(f.Schedule, f.Due)]; ok {
+			return nil, ports.ErrFired
+		}
+		s.slots[slot(f.Schedule, f.Due)] = c.Task.ID
 	}
 	s.tasks[c.Task.ID] = c.Task
 	s.timeline[c.Task.ID] = append(s.timeline[c.Task.ID], c.Entries...)
