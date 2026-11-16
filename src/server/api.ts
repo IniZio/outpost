@@ -240,9 +240,6 @@ route("PUT", "/api/secrets/:name", async ({ req, user, params }) => {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new HttpError(400, "secret names look like ENV_NAMES");
   const { value, path } = await json<{ value: string; path?: string }>(req);
   if (!value) throw new HttpError(400, "empty value");
-  if ((name === "CLAUDE_CODE_OAUTH_TOKEN" || name === "ANTHROPIC_API_KEY") && !/^sk-ant-[a-z0-9]+-[\w-]{20,}$/.test(value.trim())) {
-    throw new HttpError(400, "That isn't a Claude token. `claude setup-token` prints one that starts with sk-ant-oat01-; copy that whole line.");
-  }
   db.query("INSERT INTO secrets (user_id, name, value, path) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, name) DO UPDATE SET value=excluded.value, path=excluded.path").run(
     user.id, name, value.endsWith("\n") || !path ? value : `${value}\n`, path?.trim() || null,
   );
