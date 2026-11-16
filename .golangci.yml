@@ -1,0 +1,129 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - depguard
+    - errorlint
+    - forbidigo
+    - funlen
+    - gocognit
+    - revive
+    - wrapcheck
+  settings:
+    gocognit:
+      min-complexity: 10
+    funlen:
+      lines: 60
+    revive:
+      rules:
+        - name: argument-limit
+          arguments: [6]
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.Now$
+          pkg: ^time$
+          msg: read the time through domain.Clock
+        - pattern: ^exec\.Command(Context)?$
+          pkg: ^os/exec$
+          msg: only adapters run commands; the core never shells out
+    # Layers, as the design's import table. A longer match wins, so each allow of one internal
+    # package beats the deny of all of them.
+    depguard:
+      rules:
+        domain:
+          files: ["**/internal/domain/**"]
+          list-mode: strict
+          allow: [$gostd, github.com/IniZio/outpost/internal/domain]
+        ports:
+          files: ["**/internal/ports/**"]
+          list-mode: lax
+          deny: &internal
+            - pkg: github.com/IniZio/outpost/internal
+              desc: this layer may not import that package (see AGENTS.md, Layers)
+          allow: [github.com/IniZio/outpost/internal/domain]
+        lifecycle:
+          files: ["**/internal/lifecycle/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+        link:
+          files: ["**/internal/link/**"]
+          list-mode: lax
+          deny: *internal
+          allow: [github.com/IniZio/outpost/internal/domain]
+        machine:
+          files: ["**/internal/machine/**", "**/internal/toolmachine/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+            - github.com/IniZio/outpost/internal/link
+        adapters:
+          files:
+            - "**/internal/sandbox/**"
+            - "**/internal/agent/**"
+            - "**/internal/terminal/**"
+            - "**/internal/store/**"
+            - "**/internal/secrets/**"
+            - "**/internal/auth/**"
+            - "**/internal/github/**"
+            - "**/internal/schedule/**"
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+        egress:
+          files: ["**/internal/egress/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/ports
+            - github.com/IniZio/outpost/internal/secrets
+        api:
+          files: ["**/internal/api/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/lifecycle
+            - github.com/IniZio/outpost/internal/schedule
+            - github.com/IniZio/outpost/internal/auth
+            - github.com/IniZio/outpost/internal/toolmachine
+        agent-cmd:
+          files: ["**/cmd/outpost-agent/**"]
+          list-mode: lax
+          deny: *internal
+          allow:
+            - github.com/IniZio/outpost/internal/link
+            - github.com/IniZio/outpost/internal/machine
+            - github.com/IniZio/outpost/internal/sandbox
+        client:
+          files: ["**/cmd/outpost-cli/**", "**/api/client/**"]
+          list-mode: lax
+          deny: *internal
+  exclusions:
+    rules:
+      - path: internal/domain/
+        linters: [forbidigo]
+        text: domain\.Clock
+      - path: internal/(sandbox|agent|terminal|machine)/
+        linters: [forbidigo]
+        text: shells out
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: [github.com/IniZio/outpost]

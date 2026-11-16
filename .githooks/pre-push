@@ -1,0 +1,3 @@
+#!/bin/sh
+if command -v mise >/dev/null; then exec mise exec -- make --no-print-directory lint test; fi
+exec make --no-print-directory lint test
