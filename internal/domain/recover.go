@@ -54,18 +54,15 @@ func (x *tx) agentGone(a Active, obs AgentObservation) {
 }
 
 // reissue emits again every effect whose answer is outstanding, and re-runs the turn-end check
-// of an unattended run that sat idle through the restart, unless its agent already exited. It returns how many effects it emitted.
+// of an unattended run that sat idle through the restart, unless its agent already exited. It
+// returns how many effects it emitted.
 func (x *tx) reissue(a Active) int {
 	for k, ask := range a.Asks {
 		if ask.ID != 0 {
 			x.emit(x.askEffect(AskKind(k), ask.ID))
 		}
 	}
-	idle := x.t.Kind.Unattended() && a.Turn.idle() && a.Asks[AskDoneMarker].ID == 0 && a.Asks[AskInspect].ID == 0
-	switch {
-	case idle && !a.Deadlines.Armed(DlNudge) && !a.Deadlines.Armed(DlGiveUp):
-		x.t.Life = x.armLadder(a, 0)
-	case idle:
+	if x.t.Kind.Unattended() && a.Turn.idle() && a.Asks[AskDoneMarker].ID == 0 && a.Asks[AskInspect].ID == 0 {
 		x.t.Life = x.askMarker(a, WhyTurnEnd)
 	}
 	return len(x.fx)

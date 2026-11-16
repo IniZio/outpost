@@ -68,10 +68,15 @@ func (x *tx) turnEnded(a Active, worked time.Duration) {
 
 // armLadder arms the next rung of the nudge ladder, or the give-up, and probes the done marker.
 func (x *tx) armLadder(a Active, worked time.Duration) Active {
+	return x.askMarker(x.armRung(a, worked), WhyTurnEnd)
+}
+
+// armRung arms the next rung of the nudge ladder, or the give-up after the last one.
+func (x *tx) armRung(a Active, worked time.Duration) Active {
 	n, kind, after := a.Nudge.nudgeStep(worked, x.p)
 	a.Nudge = n
 	a.Deadlines = a.Deadlines.Clear(DlNudge).Clear(DlGiveUp).Set(kind, x.now.Add(after))
-	return x.askMarker(a, WhyTurnEnd)
+	return a
 }
 
 // askMarker records a done-marker probe and emits it.
@@ -155,7 +160,7 @@ func (x *tx) onMarkerAbsent(a Active, why Why) {
 	switch why {
 	case WhyNudge:
 		a.Nudge.Sent++
-		x.t.Life = a
+		x.t.Life = x.armRung(a, 0) // an agent that ignores the nudge never ends a turn to arm the next
 		x.note(EntryPhase, "The agent paused without marking the run done; nudged it")
 		x.emit(SendToAgent{Text: NudgeText})
 	case WhyGiveUp:

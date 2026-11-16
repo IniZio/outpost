@@ -128,17 +128,6 @@ func TestARestartRerunsTheTurnEndCheckOfAnIdleUnattendedRun(t *testing.T) {
 	}
 }
 
-func TestARestartArmsTheLadderWhenAnIdleUnattendedRunHadNone(t *testing.T) {
-	r := runOf(t, fixture(domain.KindScheduled, active(domain.TurnPaused)))
-	res := restarted(t, r, agentUp)
-	if kinds(res.Effects) != "ProbeDoneMarker" {
-		t.Fatalf("effects = %q", kinds(res.Effects))
-	}
-	if at, ok := r.task.NextDeadline(); !ok || at.Sub(r.now) != 3*time.Minute {
-		t.Errorf("deadline in %v (%v), want the first nudge in 3m", at.Sub(r.now), ok)
-	}
-}
-
 func TestARestartKeepsTheDeadlinesAndTheLadderGoesOn(t *testing.T) {
 	r := working(t, domain.KindScheduled)
 	r.report(domain.HCIdle, "")

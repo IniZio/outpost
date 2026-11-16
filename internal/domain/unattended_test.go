@@ -187,3 +187,26 @@ func TestAnAttendedQuestionJustWaits(t *testing.T) {
 		t.Errorf("effects %q, last %+v", kinds(res.Effects), lastEntry(r))
 	}
 }
+
+func TestASilentAgentStillReachesTheGiveUp(t *testing.T) {
+	r := newRun(t, domain.KindScheduled, spec()).up()
+	r.report(domain.HCWorking, "")
+	r.report(domain.HCIdle, "")
+	marked(r, false)
+	for rung := range len(r.policy.NudgeAfter) {
+		if _, ok := r.task.NextDeadline(); !ok {
+			t.Fatalf("rung %d: no deadline armed although the agent never answered the last nudge", rung+1)
+		}
+		r.advanceTo(r.policy.NudgeAfter[rung])
+		if got := sent(marked(r, false).Effects); len(got) != 1 || got[0] != domain.NudgeText {
+			t.Fatalf("rung %d: sent %q, want the nudge", rung+1, got)
+		}
+	}
+	if at, ok := r.task.NextDeadline(); !ok || at.Sub(r.now) != r.policy.GiveUp {
+		t.Fatalf("next deadline in %v (%v), want the give-up in %v", at.Sub(r.now), ok, r.policy.GiveUp)
+	}
+	r.advanceTo(r.policy.GiveUp)
+	marked(r, false)
+	r.apply(domain.SummaryRead{Ask: latest[domain.ReadSummary](r).Ask})
+	r.want(domain.StatusDone)
+}

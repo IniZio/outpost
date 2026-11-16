@@ -67,13 +67,18 @@ func (t Task) validateActive(a Active) error {
 		rule{a.Turn.State >= TurnPending && a.Turn.State <= TurnBlocked, "unknown turn state"},
 		rule{(a.Turn.State == TurnRunning) == !a.Turn.WorkingSince.IsZero(), "working since set outside a running turn"},
 		rule{a.Turn.State == TurnRunning || a.Turn.Phase == "", "phase set outside a running turn"},
-		rule{!a.Deadlines.Armed(DlNudge) && !a.Deadlines.Armed(DlGiveUp) || unattended && a.Turn.idle(), "nudge armed outside an idle unattended run"},
+		rule{!a.ladderArmed() || unattended && a.Turn.idle(), "nudge armed outside an idle unattended run"},
+		rule{!unattended || !a.Turn.idle() || a.Box.Want != BoxUp || a.ladderArmed() || a.Asks[AskDoneMarker].ID != 0, "an idle unattended run has nothing that would end it"},
 		rule{(a.Box.Want == BoxReplacing) == a.Deadlines.Armed(DlReplace), "replace deadline and box want disagree"},
 		rule{!a.Deadlines.Armed(DlSleep) || !unattended && a.status(t.Kind) == StatusWaiting && a.Box.Want == BoxUp, "sleep armed outside a waiting attended run with the box up"},
 		rule{a.Deadlines.Armed(DlTimeout) == (t.Spec.Timeout > 0), "timeout deadline and spec disagree"},
 		t.validateBox(a),
 		t.validateAsks(a),
 	)
+}
+
+func (a Active) ladderArmed() bool {
+	return a.Deadlines.Armed(DlNudge) || a.Deadlines.Armed(DlGiveUp)
 }
 
 func (t Task) validateBox(a Active) rule {
