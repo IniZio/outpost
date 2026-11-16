@@ -12,7 +12,7 @@ make ci             # lint, audit, test, build
 
 - `make lint` checks formatting (gofumpt, goimports), runs golangci-lint, and runs typos.
 - `make audit` runs govulncheck and fails on an untidy `go.mod`.
-- `make test` runs `go test -race -cover`.
+- `make test` runs `go test -race -cover`. The Postgres tests skip unless `OUTPOST_TEST_DATABASE_URL` is set. `make test-pg` starts a throwaway `postgres:17` container on a free port and runs them, and CI does the same with a service container. Each test makes its own database.
 - Lint tools are pinned in `tools/go.mod` and run with `go tool -modfile=tools/go.mod`.
 - `GOTOOLCHAIN=local` is set by `mise.toml` and the Makefile, so the pinned Go is the one that runs.
 
@@ -31,7 +31,8 @@ make ci             # lint, audit, test, build
 | `internal/ops` | The catalogue of operations that cross the link: names, kinds and typed requests and replies. No behaviour. | `domain`, `link` |
 | `internal/machine` | The agent's fixed operations, over the link | `domain`, `ports`, `link`, `ops` |
 | `internal/toolmachine` | Machine tools for tasks on a tool machine such as a Mac | `domain`, `ports`, `link`, `ops` |
-| `internal/sandbox/*`, `agent/*`, `terminal/*`, `store/*`, `secrets`, `auth`, `github`, `schedule` | Adapters | `domain`, `ports` |
+| `internal/store/*` | Stores. They implement `link.KeyStore` and `link.Presence` structurally, because those interfaces name only domain types. | `domain`, `ports` |
+| `internal/sandbox/*`, `agent/*`, `terminal/*`, `secrets`, `auth`, `github`, `schedule` | Adapters | `domain`, `ports` |
 | `internal/egress` | Proxy policy and box egress | `domain`, `ports`, `secrets` |
 | `internal/api` | HTTP API, `/mcp`, websockets, web UI | `domain`, `lifecycle`, `schedule`, `auth`, `toolmachine` |
 

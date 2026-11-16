@@ -15,6 +15,18 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -25,3 +37,5 @@ jobs:
           cache-dependency-path: tools/go.sum
       - uses: crate-ci/typos@7f9d0819ca1c008ade73f4b41fa9d258d48f605b
       - run: make --no-print-directory ci TYPOS=true
+        env:
+          OUTPOST_TEST_DATABASE_URL: postgres://postgres:pw@127.0.0.1:5432/postgres
