@@ -165,15 +165,6 @@ func TestDeadPeerIsDetectedByKeepalive(t *testing.T) {
 	}
 }
 
-// deploy starts the next hub, then drains the old one while ctx lives, as a rolling deploy does.
-func deploy(t *testing.T, rig *linktest.Rig, old *link.Hub) (next *link.Hub, drained chan error) {
-	t.Helper()
-	next = rig.NextHub()
-	drained = make(chan error, 1)
-	go func() { drained <- old.Drain(deadline(t, 5*time.Second)) }()
-	return next, drained
-}
-
 func TestFiniteOpFinishesWhileTheAgentRelinksToTheNewHub(t *testing.T) {
 	rig, w := newRig(t, nil)
 	ctx := deadline(t, 10*time.Second)
@@ -188,7 +179,7 @@ func TestFiniteOpFinishesWhileTheAgentRelinksToTheNewHub(t *testing.T) {
 	}()
 	<-w.started
 
-	next, drained := deploy(t, rig, old)
+	next, drained := rig.Deploy(old)
 	rig.WaitLinked(next)
 	select {
 	case got := <-reply:
@@ -216,7 +207,7 @@ func TestFiniteOpFinishesWhileTheAgentRelinksToTheNewHub(t *testing.T) {
 func TestLateOfflineFromTheOldLinkDoesNotMarkTheNewOneOffline(t *testing.T) {
 	rig, _ := newRig(t, nil)
 	old := rig.Hub
-	next, drained := deploy(t, rig, old)
+	next, drained := rig.Deploy(old)
 	rig.WaitLinked(next)
 	if err := <-drained; err != nil {
 		t.Fatalf("drain: %v", err)
@@ -303,7 +294,7 @@ func TestResumableOpsAreReopenedOnTheNewLink(t *testing.T) {
 		t.Fatal("both resumable ops must open")
 	}
 
-	next, drained := deploy(t, rig, old)
+	next, drained := rig.Deploy(old)
 	rig.WaitLinked(next)
 	if err := <-held; !errors.Is(err, link.ErrDraining) {
 		t.Fatalf("a hold on a draining server ends, the next server holds again: %v", err)
@@ -408,6 +399,10 @@ func TestRelinkWaitsForTheNewHubWhenTheOldOneDrainsFirst(t *testing.T) {
 	drained := make(chan error, 1)
 	go func() { drained <- old.Drain(deadline(t, 5*time.Second)) }()
 	time.Sleep(150 * time.Millisecond)
+	st, err := link.Call(deadline(t, 5*time.Second), rig.Agent.Server(), status, none{})
+	if err != nil || st.Machine != rig.Machine {
+		t.Fatalf("an agent op while the old link drains must still be served: %v %v", st, err)
+	}
 	next := rig.NextHub()
 	rig.WaitLinked(next)
 	if err := <-drained; err != nil {
@@ -444,4 +439,30 @@ func TestAFiniteOpStillRunningAtTheDrainBudgetIsCutAndNotReplayed(t *testing.T) 
 		t.Fatalf("a cut op must never be replayed, it started again as %q", id)
 	case <-time.After(200 * time.Millisecond):
 	}
+}
+
+func TestAgentShutdownLetsAFiniteOpFinish(t *testing.T) {
+	rig, w := newRig(t, nil)
+	ctx := deadline(t, 10*time.Second)
+	reply := make(chan text, 1)
+	go func() {
+		got, err := link.Call(ctx, rig.Hub.Link(rig.Machine), gate, text{"job"})
+		if err != nil {
+			t.Error(err)
+		}
+		reply <- got
+	}()
+	<-w.started
+	stopped := make(chan struct{})
+	go func() { rig.Stop(); close(stopped) }()
+	select {
+	case <-stopped:
+		t.Fatal("the agent must wait for a finite op, up to the drain budget")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(w.release)
+	if got := <-reply; got.S != "released job" {
+		t.Fatalf("the op must finish before the agent lets go: %v", got)
+	}
+	<-stopped
 }

@@ -289,6 +289,7 @@ func (h hsio) readServer(ctx context.Context) (serverFrame, error) {
 // accepted is what a successful server handshake yields.
 type accepted struct {
 	machine domain.Machine
+	key     domain.MachineKey
 	build   string
 	proto   uint16
 	gen     domain.LinkGen
@@ -324,7 +325,7 @@ func (h *Hub) serverHandshake(ctx context.Context, c *websocket.Conn) (accepted,
 		h.unlinked(m.ID, gen)
 		return accepted{}, err
 	}
-	return accepted{machine: m, build: hello.Build, proto: hello.Proto, gen: gen}, nil
+	return accepted{machine: m, key: key, build: hello.Build, proto: hello.Proto, gen: gen}, nil
 }
 
 // readHello reads the agent's first frame. Any hello this server cannot read, or whose protocol is

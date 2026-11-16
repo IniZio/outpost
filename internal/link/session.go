@@ -176,6 +176,11 @@ func (s *session) retire(ctx context.Context) {
 	_ = s.mux.Close()
 }
 
+// kill ends the session without waiting for anything. The mux is shut the moment Close starts, so
+// routing stops at once, but closing the WebSocket underneath waits for the peer's close frame, so a
+// peer that never answers must not hold up the caller.
+func (s *session) kill() { go func() { _ = s.mux.Close() }() }
+
 // stream is a yamux stream that tells the in-flight set when it ends. It is the Stream the public
 // API returns. kind is owned by the flight's mutex.
 type stream struct {

@@ -27,11 +27,24 @@ type fakeStore struct {
 	linkedErr   error
 	linked      int
 	unlinkedGen []domain.LinkGen
+	// afterFirstLookup runs once, after the first Lookup has answered, to land a revoke inside the
+	// handshake.
+	afterFirstLookup func()
 }
 
 func (f *fakeStore) Lookup(_ context.Context, id domain.MachineID) (domain.Machine, domain.MachineKey, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	hook := f.afterFirstLookup
+	f.afterFirstLookup = nil
+	m, key, err := f.lookup(id)
+	f.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return m, key, err
+}
+
+func (f *fakeStore) lookup(id domain.MachineID) (domain.Machine, domain.MachineKey, error) {
 	switch {
 	case f.lookupErr != nil:
 		return domain.Machine{}, domain.MachineKey{}, f.lookupErr
@@ -382,5 +395,44 @@ func TestProofFieldsCannotShift(t *testing.T) {
 	b := proof{"a", []byte("bc"), "m", 1}.message()
 	if string(a) == string(b) {
 		t.Fatal("moving a byte between fields must change the signed message")
+	}
+}
+
+func TestRevokeDuringTheHandshakeStillEndsTheLink(t *testing.T) {
+	// Keepalive is an hour, so only the post-attach check can end this link inside the test.
+	th := newTestHub(t, func(c *HubConfig) { c.Timing.KeepAlive = time.Hour })
+	th.store.afterFirstLookup = func() {
+		th.store.mu.Lock()
+		th.store.known = false
+		th.store.mu.Unlock()
+		th.hub.Kick(th.id) // finds no link yet: the machine is still mid-handshake
+	}
+	rc := dialRaw(t, th.wsURL())
+	nonce := rc.challenge(th.id)
+	rc.send(wire{T: "proof", Sig: proof{th.hub.cfg.Host, nonce, th.id, ProtoVersion}.sign(th.key)})
+	if w := rc.recvWire(); w.T != "welcome" {
+		t.Fatalf("the handshake had already passed: %+v", w)
+	}
+	waitFor(t, func() bool {
+		th.store.mu.Lock()
+		defer th.store.mu.Unlock()
+		return len(th.store.unlinkedGen) == 1
+	})
+	if _, ok := th.hub.Link(th.id).Info(); ok {
+		t.Fatal("a machine revoked mid-handshake must not stay linked")
+	}
+}
+
+func TestAttachKeepsTheHigherGeneration(t *testing.T) {
+	l := newTestHub(t, nil).hub.Link("m1")
+	s5, s6 := &session{info: Info{Gen: 5}}, &session{info: Info{Gen: 6}}
+	if l.attach(s6) != nil {
+		t.Fatal("the first attach replaces nothing")
+	}
+	if got := l.attach(s5); got != s5 || l.cur.Load() != s6 {
+		t.Fatal("a link of an earlier generation that attaches late must be the one retired")
+	}
+	if got := l.attach(&session{info: Info{Gen: 7}}); got != s6 {
+		t.Fatal("a later generation replaces the route")
 	}
 }

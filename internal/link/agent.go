@@ -172,7 +172,7 @@ func (a *Agent) dial(ctx context.Context) (*session, error) {
 		_ = c.Close(websocket.StatusNormalClosure, "")
 		return nil, err
 	}
-	s, err := newSession(websocket.NetConn(ctx, c, websocket.MessageBinary), true, sessionOpts{
+	s, err := newSession(websocket.NetConn(context.WithoutCancel(ctx), c, websocket.MessageBinary), true, sessionOpts{
 		Info:     Info{Machine: a.cfg.ID, Gen: w.Gen, Build: a.cfg.Build, Proto: w.Proto, Since: a.cfg.Clock.Now()},
 		PeerCaps: allCaps(), Peer: a.Server(), Reg: a.cfg.Reg, Ctl: a.ctl, Timing: a.cfg.Timing,
 	})
@@ -245,10 +245,12 @@ func (a *Agent) serveLink(ctx context.Context, sess *session) {
 func (a *Agent) install(ctx context.Context, s *session) {
 	a.cur.Store(s)
 	a.setState(StateUp, nil)
-	go s.serve(ctx)
+	go s.serve(context.WithoutCancel(ctx))
 }
 
-// release lets a session go at shutdown, giving its finite streams the drain budget.
+// release lets a session go at shutdown, giving its finite streams the drain budget. The session
+// and its handlers do not run on Run's ctx for exactly this reason: they must outlive its
+// cancellation until release closes the session.
 func (a *Agent) release(ctx context.Context, s *session) {
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.cfg.Timing.Drain)
 	defer cancel()

@@ -279,8 +279,12 @@ func TestRetireCutsAStreamStillRunningAtTheBudget(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	srv.retire(ctx)
-	if _, err := io.ReadAll(s); err == nil {
-		t.Log("a cut stream reads as EOF: the caller learns from the session ending")
+	read := make(chan struct{})
+	go func() { _, _ = io.ReadAll(s); close(read) }()
+	select {
+	case <-read:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a cut stream must end the caller's read and not leave it hanging")
 	}
 	select {
 	case <-srv.Done():

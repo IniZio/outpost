@@ -59,6 +59,7 @@ type Rig struct {
 	active atomic.Pointer[link.Hub]
 	conns  *tracker
 	done   chan struct{}
+	stop   context.CancelFunc
 }
 
 // New starts a hub and an agent, waits for the first link and stops both at test cleanup.
@@ -111,6 +112,19 @@ func (r *Rig) NextHub() *link.Hub {
 	return hub
 }
 
+// Deploy is a rolling deploy: it starts the next hub, then drains old in the background within the
+// Timing.Drain budget. The returned channel carries Drain's result.
+func (r *Rig) Deploy(old *link.Hub) (next *link.Hub, drained <-chan error) {
+	next = r.NextHub()
+	res := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), r.o.Timing.Drain)
+		defer cancel()
+		res <- old.Drain(ctx)
+	}()
+	return next, res
+}
+
 func (r *Rig) startAgent() {
 	a, err := link.NewAgent(link.AgentConfig{
 		URL: r.URL, ID: r.Machine, Key: r.Key, Build: "linktest", Reg: r.o.Agent,
@@ -121,8 +135,15 @@ func (r *Rig) startAgent() {
 	}
 	r.Agent = a
 	ctx, cancel := context.WithCancel(context.Background())
+	r.stop = cancel
 	go func() { defer close(r.done); _ = a.Run(ctx) }()
-	r.t.Cleanup(func() { cancel(); <-r.done })
+	r.t.Cleanup(r.Stop)
+}
+
+// Stop shuts the agent down as a SIGTERM does and returns when Run has. It is safe to call twice.
+func (r *Rig) Stop() {
+	r.stop()
+	<-r.done
 }
 
 // WaitLinked blocks until hub has a live link to the rig's machine, or fails the test.

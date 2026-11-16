@@ -66,7 +66,9 @@ type Op[Req, Resp any] struct{ s spec }
 
 // StreamOp is a finite request that gets one reply and then becomes a byte stream. Resp is the
 // opening reply, for example the address a listener bound. The bytes that follow are untyped. A
-// drain treats it like an Op: waited for, then cut, never replayed.
+// drain treats it like an Op: waited for, then cut, never replayed. A cut stream reads as a clean
+// EOF, the same as one the peer finished, so a finite op that must tell the two apart carries its
+// own end marker in the bytes (a length, a trailer, an exit record).
 type StreamOp[Req, Resp any] struct{ s spec }
 
 // ResumableOp is a long-lived, idempotent stream op, such as an hc byte stream, a held listen or a

@@ -123,11 +123,25 @@ func (h *Hub) run(ctx context.Context, c *websocket.Conn, acc accepted) {
 	if old := l.attach(s); old != nil {
 		go h.retire(old)
 	}
+	if !h.stillKnown(ctx, acc) {
+		s.kill()
+	}
 	if h.draining.Load() {
 		go h.handOff(context.WithoutCancel(ctx), s)
 	}
 	s.serve(ctx)
 	l.detach(s)
+}
+
+// stillKnown re-reads the machine after its link is attached. A revoke that landed between the
+// handshake's lookup and the attach has already run Kick, which saw no link to close, so without
+// this check the revoked machine would stay linked. A failed lookup is not a revoke.
+func (h *Hub) stillKnown(ctx context.Context, acc accepted) bool {
+	_, key, err := h.cfg.Keys.Lookup(ctx, acc.machine.ID)
+	if errors.Is(err, domain.ErrUnknownMachine) {
+		return false
+	}
+	return err != nil || key == acc.key
 }
 
 func (h *Hub) retire(s *session) {
@@ -169,7 +183,7 @@ func (h *Hub) Kick(id domain.MachineID) {
 	s := l.cur.Load()
 	l.mu.Unlock()
 	if s != nil {
-		_ = s.mux.Close()
+		s.kill()
 	}
 }
 
@@ -208,18 +222,18 @@ func (h *Hub) sessions() []*session {
 	return out
 }
 
-// handOff asks one agent to relink, stops the session taking new work and waits for the agent to
-// let go. It reports whether the agent did before ctx ended. An agent that does not ack (an old
-// one) gets a plain retire instead, so it sees the close and reconnects.
+// handOff asks one agent to relink, cuts the session's resumable streams and waits for the agent to
+// let go. It reports whether the agent did before ctx ended. It does not seal the session or send
+// GoAway: the draining flag already keeps this server from opening ops, and the agent's own ops keep
+// being served on the old link until its successor is up, when the agent retires it. An agent that
+// does not ack (an old one) gets a plain retire instead, so it sees the close and reconnects.
 func (h *Hub) handOff(ctx context.Context, s *session) bool {
 	if _, err := Call(ctx, s, ctlRelink, struct{}{}); err != nil {
 		h.cfg.Log.Warn("link relink not acked", "machine", s.info.Machine, "err", err)
 		s.retire(ctx)
 		return ctx.Err() == nil
 	}
-	s.flight.seal()
 	s.flight.cutResumable()
-	_ = s.mux.GoAway()
 	select {
 	case <-s.Done():
 		return true
@@ -307,15 +321,21 @@ func (l *Link) await(ctx context.Context, changed <-chan struct{}, wait time.Dur
 	}
 }
 
-// attach makes s the route and returns the session it replaced, if any.
-func (l *Link) attach(s *session) (old *session) {
+// attach makes s the route and returns the session that must be retired: the one it replaced, or s
+// itself if a link of a later generation is already the route. Two handshakes for one machine can
+// reach Presence.Linked in one order and attach in the other, and the store's generation is the
+// authority.
+func (l *Link) attach(s *session) (retire *session) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	old = l.cur.Swap(s)
+	if cur := l.cur.Load(); cur != nil && cur.info.Gen > s.info.Gen {
+		return s
+	}
+	retire = l.cur.Swap(s)
 	l.gone = false
 	close(l.changed)
 	l.changed = make(chan struct{})
-	return old
+	return retire
 }
 
 // detach clears s if it is still the route, starts the link-moving window and records the machine
