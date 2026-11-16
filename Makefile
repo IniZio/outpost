@@ -7,10 +7,10 @@ TYPOS ?= typos
 
 PG_IMAGE := postgres:17
 
-.PHONY: help setup lint audit test test-pg ci build hc-golden it it-sweep tools-image
+.PHONY: help setup lint audit test test-pg ci build hc-golden it it-sweep tools-image proxy-image
 
 help:
-	@echo "targets: setup lint audit test test-pg ci build hc-golden it tools-image"
+	@echo "targets: setup lint audit test test-pg ci build hc-golden it tools-image proxy-image"
 
 setup:
 	@go version | grep -q 'go$(GO_VERSION) ' || { echo "setup: need Go $(GO_VERSION) (mise install)"; exit 1; }
@@ -67,6 +67,11 @@ tools-image:
 	cp images/tools/* bin/tools-image/
 	cp -L "$$(command -v hc)" bin/tools-image/hc
 	docker build -t $(TOOLS_IMAGE) bin/tools-image
+
+# proxy-image builds the credential proxy. Its Python tests run as a build step.
+PROXY_IMAGE ?= ob-proxy:dev
+proxy-image:
+	docker build -q -t $(PROXY_IMAGE) images/proxy
 
 ci: lint audit test build
 

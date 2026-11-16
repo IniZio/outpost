@@ -39,3 +39,4 @@ jobs:
       - run: make --no-print-directory ci TYPOS=true
         env:
           OUTPOST_TEST_DATABASE_URL: postgres://postgres:pw@127.0.0.1:5432/postgres
+      - run: make --no-print-directory proxy-image
