@@ -49,7 +49,7 @@ linters:
           deny: &internal
             - pkg: github.com/IniZio/outpost/internal
               desc: this layer may not import that package (see AGENTS.md, Layers)
-          allow: [github.com/IniZio/outpost/internal/domain]
+          allow: [github.com/IniZio/outpost/internal/domain, github.com/IniZio/outpost/internal/ports]
         lifecycle:
           files: ["**/internal/lifecycle/**"]
           list-mode: lax

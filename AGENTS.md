@@ -24,7 +24,8 @@ make ci             # lint, audit, test, build
 | `cmd/outpost-agent` | The machine agent: `pair`, `run` | `domain`, `link`, `machine`, `ops`, `sandbox/*` |
 | `cmd/outpost-cli` | The laptop client | `api/client` |
 | `internal/domain` | Types, the task state machine, the `Clock` seam. No I/O. | standard library only |
-| `internal/ports` | The interfaces: Sandbox, Agent, Terminal, Store, Secrets, GitHub | `domain` |
+| `internal/ports` | The interfaces: Boxes (a task's box and the agent terminal in it), Agent, Secrets, Store, Enrollments | `domain` |
+| `internal/ports/portstest` | In-memory fakes of the ports, for tests of the core and of adapters | `domain`, `ports` |
 | `internal/lifecycle` | Runs a task from start to clean-up | `domain`, `ports` |
 | `internal/link` | The machine link: transport, handshake, relink. Knows no operation. | `domain` |
 | `internal/ops` | The catalogue of operations that cross the link: names, kinds and typed requests and replies. No behaviour. | `domain`, `link` |
