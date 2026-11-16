@@ -175,6 +175,16 @@ const (
 	BoxReleased
 )
 
+var boxWantNames = [...]string{"", "none", "up", "asleep", "replacing", "waking", "stopped", "released"}
+
+// String names the intended box state.
+func (w BoxWant) String() string {
+	if int(w) >= len(boxWantNames) {
+		return "unknown"
+	}
+	return boxWantNames[w]
+}
+
 // Box is what the domain knows about an active task's box. The agent runs inside it, so box up
 // also means the agent's terminal can exist. Want is only ever Up, Asleep, Replacing or Waking
 // here. Lost is why the box was lost, for the note to the agent. StartedAt is when Outpost last

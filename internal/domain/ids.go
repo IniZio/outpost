@@ -54,6 +54,16 @@ const (
 	StatusStopped
 )
 
+var statusNames = [...]string{"", "queued", "starting", "working", "waiting", "done", "failed", "stopped"}
+
+// String names the status as the UI and the queue query spell it.
+func (s Status) String() string {
+	if int(s) >= len(statusNames) {
+		return "unknown"
+	}
+	return statusNames[s]
+}
+
 // Terminal reports whether the status is one of the three resumable end states.
 func (s Status) Terminal() bool {
 	return s == StatusDone || s == StatusFailed || s == StatusStopped
