@@ -31,7 +31,7 @@ type Entry struct {
 
 // Notes to the agent are rules too: the unattended nudge, the box-was-replaced note, the OOM
 // warning. They live here with the rules that trigger them.
-const NudgeText = "[outpost] You stopped without marking this run as done. Nobody is watching this run. If the whole task is complete, run `touch /run/outpost/done` and then write your final summary. If you are waiting for something, keep going."
+const NudgeText = "[outpost] You stopped without marking this run as done. Nobody is watching this run. If the whole task is complete, run `touch " + DoneMarkerPath + "` and then write your final summary. If you are waiting for something, keep going."
 
 const OOMNote = "[outpost] The kernel killed a process in your box because memory ran out (the box limit is reached). The box is still up, but what that process was doing is gone. Check what died, restart it, and keep memory under the box limit."
 
