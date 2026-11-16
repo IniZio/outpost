@@ -285,3 +285,41 @@ func TestTheGrantWireShapeIsWhatTheProxyReads(t *testing.T) {
 		}
 	}
 }
+
+func TestBoxesCarryTheOwnersGitIdentity(t *testing.T) {
+	w := newWorld(t)
+	calls := 0
+	w.e.cfg.Profile = func(_ context.Context, token string) (Profile, error) {
+		calls++
+		if token != "gho_real" {
+			t.Fatalf("token %q", token)
+		}
+		return Profile{Login: "ana", ID: 42, Name: "Ana Lee"}, nil
+	}
+	ctx := context.Background()
+	c, err := w.e.Credentials(ctx, target(1, 2), "ana", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "42+ana@users.noreply.github.com"
+	for _, k := range []string{"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"} {
+		if c.Env[k] != want {
+			t.Fatalf("%s = %q", k, c.Env[k])
+		}
+	}
+	if c.Env["GIT_AUTHOR_NAME"] != "Ana Lee" || c.Env["GIT_COMMITTER_NAME"] != "Ana Lee" {
+		t.Fatalf("names: %v", c.Env)
+	}
+	if _, err := w.e.Credentials(ctx, target(1, 3), "ana", nil); err != nil || calls != 1 {
+		t.Fatalf("one GitHub call per owner: %d %v", calls, err)
+	}
+}
+
+func TestGitIdentityFallsBackToTheLogin(t *testing.T) {
+	w := newWorld(t)
+	w.e.cfg.Profile = func(context.Context, string) (Profile, error) { return Profile{Login: "ana", ID: 42}, nil }
+	c, err := w.e.Credentials(context.Background(), target(1, 2), "ana", nil)
+	if err != nil || c.Env["GIT_AUTHOR_NAME"] != "ana" {
+		t.Fatalf("no display name falls back to the login: %v %v", c.Env, err)
+	}
+}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
+	"sync"
 
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/ports"
@@ -49,6 +51,13 @@ const (
 	noProxy    = "localhost,127.0.0.1,0.0.0.0,::1,10.0.2.2,.local,.internal"
 )
 
+// Profile is who a GitHub token belongs to.
+type Profile struct {
+	Login domain.Login
+	ID    int64
+	Name  string // the display name; may be empty
+}
+
 // Tasks loads a task. ports.Store does.
 type Tasks interface {
 	Load(ctx context.Context, id domain.TaskID) (domain.Task, error)
@@ -68,6 +77,9 @@ type Config struct {
 	CAFile     string // the proxy's public CA, which the proxy writes on its first start
 	ProxyToken string // the bearer the proxy presents to the grant endpoint
 	Rules      []Rule
+	// Profile reads who a GitHub token belongs to. When set, every box gets the owner's git
+	// identity in its env. Egress asks once per owner and remembers the answer.
+	Profile func(ctx context.Context, token string) (Profile, error)
 }
 
 // Egress implements ports.Secrets and answers grants.
@@ -75,6 +87,8 @@ type Egress struct {
 	cfg   Config
 	sign  signer
 	proxy *url.URL
+	mu    sync.Mutex
+	ident map[domain.Login]map[string]string
 }
 
 var _ ports.Secrets = (*Egress)(nil)
@@ -90,7 +104,7 @@ func New(cfg Config) (*Egress, error) {
 	case len(cfg.ProxyToken) < 16:
 		return nil, errors.New("egress: the proxy token needs at least 16 characters")
 	}
-	return &Egress{cfg: cfg, sign: newSigner(cfg.Key), proxy: u}, nil
+	return &Egress{cfg: cfg, sign: newSigner(cfg.Key), proxy: u, ident: map[domain.Login]map[string]string{}}, nil
 }
 
 // Credentials is the box's env for target t: the proxy login of t's box generation in every proxy
@@ -106,7 +120,44 @@ func (e *Egress) Credentials(ctx context.Context, t ports.Target, owner domain.L
 	if err != nil {
 		return ports.Creds{}, fmt.Errorf("egress: the proxy CA: %w", err)
 	}
-	return ports.Creds{Env: e.env(Login{Task: t.Task, Gen: t.Gen}), CA: ca}, nil
+	env := e.env(Login{Task: t.Task, Gen: t.Gen})
+	id, err := e.identity(ctx, owner)
+	if err != nil {
+		return ports.Creds{}, err
+	}
+	maps.Copy(env, id)
+	return ports.Creds{Env: env, CA: ca}, nil
+}
+
+// identity is the git author and committer env of owner: their display name (or login) and their
+// noreply address. The first start of an owner asks GitHub; later ones reuse the answer.
+func (e *Egress) identity(ctx context.Context, owner domain.Login) (map[string]string, error) {
+	if e.cfg.Profile == nil {
+		return nil, nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if m, ok := e.ident[owner]; ok {
+		return m, nil
+	}
+	token, err := e.cfg.Vault.Get(ctx, owner, GitHub().Secret)
+	if err != nil {
+		return nil, fmt.Errorf("egress: github token of %s: %w", owner, err)
+	}
+	p, err := e.cfg.Profile(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("egress: git identity of %s: %w", owner, err)
+	}
+	name := p.Name
+	if name == "" {
+		name = string(p.Login)
+	}
+	email := fmt.Sprintf("%d+%s@users.noreply.github.com", p.ID, p.Login)
+	m := map[string]string{
+		"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email,
+	}
+	e.ident[owner] = m
+	return m, nil
 }
 
 func (e *Egress) env(l Login) map[string]string {

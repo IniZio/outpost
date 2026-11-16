@@ -153,7 +153,8 @@ func (s *server) credentials(key secrets.Key, v *secrets.Vault) (ports.Secrets, 
 	}
 	e, err := egress.New(egress.Config{
 		Key: key, Vault: v, Tasks: s.store, ProxyURL: s.cfg.ProxyURL, CAFile: s.cfg.ProxyCAFile, ProxyToken: s.cfg.ProxyToken,
-		Rules: []egress.Rule{egress.GitHub(), egress.Bearer("api.anthropic.com", claude.OAuthPlaceholder, "claude")},
+		Profile: githubProfile,
+		Rules:   []egress.Rule{egress.GitHub(), egress.Bearer("api.anthropic.com", claude.OAuthPlaceholder, "claude")},
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("egress: %w", err)
@@ -251,4 +252,10 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 	dw.Wait()
 	wg.Wait()
 	return first
+}
+
+// githubProfile reads who a token belongs to, for the git identity of the owner's boxes.
+func githubProfile(ctx context.Context, token string) (egress.Profile, error) {
+	p, err := github.Client{}.Profile(ctx, token)
+	return egress.Profile{Login: p.Login, ID: p.ID, Name: p.Name}, err //nolint:wrapcheck // github wraps its own
 }

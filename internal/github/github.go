@@ -21,8 +21,21 @@ type Client struct {
 	API  string // base URL; empty is https://api.github.com
 }
 
+// Profile is who a token belongs to, as git commits name them.
+type Profile struct {
+	Login domain.Login
+	ID    int64
+	Name  string // the display name; empty when unset
+}
+
 // User returns the login a token belongs to.
 func (c Client) User(ctx context.Context, token string) (domain.Login, error) {
+	p, err := c.Profile(ctx, token)
+	return p.Login, err
+}
+
+// Profile returns the login, numeric id and display name a token belongs to.
+func (c Client) Profile(ctx context.Context, token string) (Profile, error) {
 	api, hc := c.API, c.HTTP
 	if api == "" {
 		api = "https://api.github.com"
@@ -32,26 +45,28 @@ func (c Client) User(ctx context.Context, token string) (domain.Login, error) {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api+"/user", nil)
 	if err != nil {
-		return "", fmt.Errorf("github: %w", err)
+		return Profile{}, fmt.Errorf("github: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	res, err := hc.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("github: user: %w", err)
+		return Profile{}, fmt.Errorf("github: user: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
-		return "", ErrBadToken
+		return Profile{}, ErrBadToken
 	}
 	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("github: user: %s", res.Status)
+		return Profile{}, fmt.Errorf("github: user: %s", res.Status)
 	}
 	var u struct {
 		Login string `json:"login"`
+		ID    int64  `json:"id"`
+		Name  string `json:"name"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&u); err != nil || u.Login == "" {
-		return "", fmt.Errorf("github: user: unreadable answer: %w", errors.Join(err, errors.New("no login")))
+	if err := json.NewDecoder(res.Body).Decode(&u); err != nil || u.Login == "" || u.ID == 0 {
+		return Profile{}, fmt.Errorf("github: user: unreadable answer: %w", errors.Join(err, errors.New("no login")))
 	}
-	return domain.Login(u.Login), nil
+	return Profile{Login: domain.Login(u.Login), ID: u.ID, Name: u.Name}, nil
 }
