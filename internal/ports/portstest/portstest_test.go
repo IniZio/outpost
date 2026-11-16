@@ -404,3 +404,7 @@ func TestSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestFakeSessionsMeetTheContract(t *testing.T) {
+	portstest.SessionsContract(t, portstest.NewSessions())
+}

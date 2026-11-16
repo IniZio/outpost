@@ -139,7 +139,7 @@ func TestMigrateIsIdempotentAndSafeToRaceAndRecordsVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	var n, max int
-	if err := a.Pool().QueryRow(ctx, `SELECT count(*), max(version) FROM schema_migrations`).Scan(&n, &max); err != nil || n != 1 || max != 1 {
+	if err := a.Pool().QueryRow(ctx, `SELECT count(*), max(version) FROM schema_migrations`).Scan(&n, &max); err != nil || n < 2 || n != max {
 		t.Fatalf("versions: %d rows, max %d, %v", n, max, err)
 	}
 }
