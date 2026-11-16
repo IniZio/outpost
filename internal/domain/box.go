@@ -196,7 +196,11 @@ func (x *tx) ensuredBox(ev Ensured) {
 	if !ok {
 		return
 	}
-	if ev.Err != "" {
+	switch {
+	case ev.Err != "" && ask.Why == WhyReplace:
+		x.replaceFailed(a, ev.Err)
+		return
+	case ev.Err != "":
 		x.boxStayedAsleep(a, ev.Err)
 		return
 	}
@@ -215,7 +219,23 @@ func (x *tx) ensuredBox(ev Ensured) {
 	}
 }
 
-// boxStayedAsleep gives up bringing the box back. The parked messages are lost, which the
+// replaceFailed tries the replacement again after a backoff, and fails the run once the retries
+// are spent, so a task whose box cannot come back neither holds its slot nor waits for ever.
+func (x *tx) replaceFailed(a Active, err string) {
+	tries := a.Box.Tries
+	if tries >= len(x.p.ReplaceBackoff) {
+		x.t.Life = a
+		x.close(OutcomeFailed, fmt.Sprintf("Could not bring the box back after %d tries: %s", tries+1, cut(err, maxErrText)))
+		return
+	}
+	wait := x.p.ReplaceBackoff[tries]
+	a.Box.Want, a.Box.Tries = BoxReplacing, tries+1
+	a.Deadlines = a.Deadlines.Set(DlReplace, x.now.Add(wait))
+	x.t.Life = a
+	x.note(EntryWarning, fmt.Sprintf("Could not bring the box back: %s. Trying again in %v.", cut(err, maxErrText), wait))
+}
+
+// boxStayedAsleep gives up waking a sleeping box. The parked messages are lost, which the
 // timeline says, and a later message tries again.
 func (x *tx) boxStayedAsleep(a Active, err string) {
 	a.Box = Box{Want: BoxAsleep}

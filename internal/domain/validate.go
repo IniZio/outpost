@@ -91,6 +91,8 @@ func (t Task) validateBox(a Active) rule {
 	return firstRule(
 		rule{b.Lost == "" || b.Want == BoxReplacing || b.Want == BoxWaking, "lost reason outside a replacement"},
 		rule{len(b.Parked) == 0 || b.Want != BoxUp, "messages parked while the box is up"},
+		rule{b.Tries == 0 || b.Want == BoxReplacing || b.Want == BoxWaking, "replacement tries outside a replacement"},
+		rule{!t.Kind.Unattended() || b.Want != BoxAsleep, "an unattended run's box is asleep with nobody to wake it"},
 	)
 }
 

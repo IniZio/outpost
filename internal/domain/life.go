@@ -197,12 +197,13 @@ func (w BoxWant) String() string {
 // also means the agent's terminal can exist. Want is only ever Up, Asleep, Replacing or Waking
 // here. Lost is why the box was lost, for the note to the agent. StartedAt is when Outpost last
 // started it, so a start event soon after is our own echo. Parked holds messages waiting for the
-// box to come back.
+// box to come back. Tries counts failed attempts to replace a lost box.
 type Box struct {
 	Want      BoxWant
 	Lost      string
 	StartedAt time.Time
 	Parked    []string
+	Tries     int
 }
 
 // Turn is the agent's turn state as the domain sees it, built from hc's level reports.

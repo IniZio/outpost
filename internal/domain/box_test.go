@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -167,20 +168,62 @@ func TestAnEnsuredAnswerForAReplacementThatWasNotNeeded(t *testing.T) {
 	}
 }
 
-func TestAFailedReplacementLeavesTheBoxAsleepForALaterMessage(t *testing.T) {
-	r := working(t, domain.KindInteractive)
+// failReplacement answers the replacement that is due next with an error.
+func failReplacement(r *run, wait time.Duration) domain.Result {
+	r.t.Helper()
+	if fx := r.advanceTo(wait); kinds(fx) != "EnsureRunning" {
+		r.t.Fatalf("effects = %q, want a replacement attempt after %v", kinds(fx), wait)
+	}
+	return r.apply(domain.Ensured{Ask: latest[domain.EnsureRunning](r).Ask, Err: "no space left"})
+}
+
+// spendRetries fails every retry the policy allows, checking each is armed with its backoff.
+func spendRetries(r *run) {
+	r.t.Helper()
+	for i, wait := range r.policy.ReplaceBackoff {
+		if r.task.BoxWant() != domain.BoxReplacing || !strings.Contains(lastEntry(r).Text, "no space left") {
+			r.t.Fatalf("try %d: box want %v, last %+v: want another try", i+1, r.task.BoxWant(), lastEntry(r))
+		}
+		if at, ok := r.task.NextDeadline(); !ok || at.Sub(r.now) != wait {
+			r.t.Fatalf("try %d: next deadline in %v (%v), want %v", i+1, at.Sub(r.now), ok, wait)
+		}
+		failReplacement(r, wait)
+	}
+}
+
+func TestAFailedReplacementRetriesThenFailsTheRun(t *testing.T) {
+	for _, kind := range []domain.Kind{domain.KindScheduled, domain.KindInteractive} {
+		t.Run(fmt.Sprint(kind), func(t *testing.T) {
+			r := working(t, kind)
+			r.apply(domain.BoxEvent{Gen: 1, Kind: domain.BoxDied})
+			failReplacement(r, r.policy.ReplaceDelay)
+			spendRetries(r)
+			closing, ok := r.task.Life.(domain.Closing)
+			if !ok || closing.Want != domain.OutcomeFailed || !strings.Contains(closing.Reason, "no space left") {
+				t.Fatalf("life = %+v, want a failed close once the retries are spent", r.task.Life)
+			}
+			r.apply(domain.SummaryRead{Ask: latest[domain.ReadSummary](r).Ask})
+			r.want(domain.StatusFailed)
+			if lastEntry(r).Kind != domain.EntryFailed || !strings.Contains(lastEntry(r).Text, "no space left") {
+				t.Errorf("last entry %+v", lastEntry(r))
+			}
+		})
+	}
+}
+
+func TestAReplacementThatWorksOnARetryCarriesOn(t *testing.T) {
+	r := working(t, domain.KindScheduled)
 	r.apply(domain.BoxEvent{Gen: 1, Kind: domain.BoxDied})
 	r.apply(domain.UserMessage{By: owner, Text: "are you there?"})
-	r.advanceTo(r.policy.ReplaceDelay)
-	r.apply(domain.Ensured{Ask: latest[domain.EnsureRunning](r).Ask, Err: "no space left"})
-
-	r.want(domain.StatusWaiting)
-	if r.task.BoxWant() != domain.BoxAsleep || lastEntry(r).Kind != domain.EntryError || !strings.Contains(lastEntry(r).Text, "no space left") {
-		t.Fatalf("box want %v, last %+v", r.task.BoxWant(), lastEntry(r))
+	failReplacement(r, r.policy.ReplaceDelay)
+	r.advanceTo(r.policy.ReplaceBackoff[0])
+	res := r.apply(domain.Ensured{Ask: latest[domain.EnsureRunning](r).Ask, Revived: true})
+	if got := sent(res.Effects); len(got) != 2 || got[1] != "are you there?" {
+		t.Errorf("sent %q, want the box-back note and the parked message", got)
 	}
-	res := r.apply(domain.UserMessage{By: owner, Text: "try again"})
-	if kinds(res.Effects) != "EnsureRunning" {
-		t.Errorf("effects = %q, want a new wake attempt", kinds(res.Effects))
+	r.apply(domain.BoxEvent{Gen: 2, Kind: domain.BoxDied})
+	failReplacement(r, r.policy.ReplaceDelay)
+	if at, _ := r.task.NextDeadline(); at.Sub(r.now) != r.policy.ReplaceBackoff[0] {
+		t.Errorf("next try in %v: a new loss starts the retries over", at.Sub(r.now))
 	}
-	r.want(domain.StatusWorking)
 }
