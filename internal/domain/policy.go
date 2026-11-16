@@ -4,12 +4,14 @@ import "time"
 
 // Policy holds every number the rules use. Callers build it once from config. Tests pass small
 // values. Nothing in the domain reads a global. A zero Timeout, IdleSleep or KeepFinished turns
-// that rule off. ReplaceBackoff is the wait before each retry of a failed box replacement, so its
+// that rule off. StallAfter is how long an unattended agent may stay pending with its box up
+// before the run treats its turn as ended. ReplaceBackoff is the wait before each retry of a failed box replacement, so its
 // length is the number of retries.
 type Policy struct {
 	NudgeAfter     []time.Duration
 	RealWork       time.Duration
 	GiveUp         time.Duration
+	StallAfter     time.Duration
 	IdleSleep      time.Duration
 	ReplaceDelay   time.Duration
 	ReplaceBackoff []time.Duration
@@ -19,7 +21,8 @@ type Policy struct {
 }
 
 // DefaultPolicy is the prototype's numbers: nudges after 3, 10 and 10 minutes, two minutes of
-// real work resets the ladder, give up 30 minutes after the third nudge, sleep the box after 30
+// real work resets the ladder, give up 30 minutes after the third nudge, check on an unattended
+// agent that has not reported a turn after 10 minutes, sleep the box after 30
 // idle minutes, wait 4 s before replacing a lost box and retry a failed replacement after 30 s,
 // 2 and 5 minutes, call a box start more than 30 s after our own start a restart, wait 2 minutes for the summary, and keep a finished task's computer a day.
 func DefaultPolicy() Policy {
@@ -27,6 +30,7 @@ func DefaultPolicy() Policy {
 		NudgeAfter:     []time.Duration{3 * time.Minute, 10 * time.Minute, 10 * time.Minute},
 		RealWork:       2 * time.Minute,
 		GiveUp:         30 * time.Minute,
+		StallAfter:     10 * time.Minute,
 		IdleSleep:      30 * time.Minute,
 		ReplaceDelay:   4 * time.Second,
 		ReplaceBackoff: []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute},

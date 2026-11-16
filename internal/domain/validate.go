@@ -72,6 +72,7 @@ func (t Task) validateActive(a Active) error {
 		rule{(a.Box.Want == BoxReplacing) == a.Deadlines.Armed(DlReplace), "replace deadline and box want disagree"},
 		rule{!a.Deadlines.Armed(DlSleep) || !unattended && a.status(t.Kind) == StatusWaiting && a.Box.Want == BoxUp, "sleep armed outside a waiting attended run with the box up"},
 		rule{a.Deadlines.Armed(DlTimeout) == (t.Spec.Timeout > 0), "timeout deadline and spec disagree"},
+		rule{a.Deadlines.Armed(DlStall) == a.stalls(t.Kind), "stall deadline and a pending unattended run disagree"},
 		t.validateBox(a),
 		t.validateAsks(a),
 	)

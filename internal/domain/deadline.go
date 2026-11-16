@@ -15,9 +15,10 @@ const (
 	DlNudge
 	DlReplace
 	DlSleep
+	DlStall
 )
 
-const numDeadlines = int(DlSleep) + 1
+const numDeadlines = int(DlStall) + 1
 
 // Deadlines holds each armed deadline as an instant. The zero time means unarmed. It is an array,
 // so copying an Active copies its deadlines and Apply cannot alias them.

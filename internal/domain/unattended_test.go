@@ -210,3 +210,42 @@ func TestASilentAgentStillReachesTheGiveUp(t *testing.T) {
 	r.apply(domain.SummaryRead{Ask: latest[domain.ReadSummary](r).Ask})
 	r.want(domain.StatusDone)
 }
+
+func TestAnUnattendedAgentThatNeverReportsATurnIsCheckedOnAndEnds(t *testing.T) {
+	r := newRun(t, domain.KindScheduled, spec()).up()
+	if at, ok := r.task.NextDeadline(); !r.task.Busy() || !ok {
+		t.Fatalf("busy %v, deadline %v (%v): a pending agent holds a slot, so something must end it", r.task.Busy(), at, ok)
+	}
+	r.dropped(domain.AgentReport{Run: 1, Status: domain.HCIdle}, domain.DropNoop)
+	fx := r.advanceTo(r.policy.StallAfter)
+	if kinds(fx) != "ProbeDoneMarker" {
+		t.Fatalf("effects = %q, want the done marker checked as at a turn end", kinds(fx))
+	}
+	r.want(domain.StatusWorking)
+	marked(r, false)
+	if at, ok := r.task.NextDeadline(); !ok || at.Sub(r.now) != r.policy.NudgeAfter[0] {
+		t.Errorf("next deadline in %v (%v), want the nudge ladder to take over", at.Sub(r.now), ok)
+	}
+}
+
+func TestAPendingAgentThatMarkedTheRunDoneFinishesAtTheStall(t *testing.T) {
+	r := newRun(t, domain.KindScheduled, spec()).up()
+	r.advanceTo(r.policy.StallAfter)
+	if kinds(marked(r, true).Effects) != "ReadSummary" {
+		t.Errorf("want the run closed: a turn too short for hc to report still counts")
+	}
+}
+
+func TestAMessageToAPendingUnattendedRunKeepsTheStallDeadline(t *testing.T) {
+	r := newRun(t, domain.KindScheduled, spec()).up()
+	want, _ := r.task.NextDeadline()
+	r.advance(time.Minute)
+	r.apply(domain.UserMessage{By: owner, Text: "go on"})
+	if got, _ := r.task.NextDeadline(); !got.Equal(want) {
+		t.Errorf("deadline %v, want %v", got, want)
+	}
+	r.report(domain.HCWorking, "")
+	if _, ok := r.task.NextDeadline(); ok {
+		t.Error("a working agent must leave no stall armed")
+	}
+}

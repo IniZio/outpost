@@ -31,6 +31,12 @@ func (x *tx) settled(a Active) Deadlines {
 	if a.Box.Want != BoxReplacing {
 		d = d.Clear(DlReplace)
 	}
+	switch {
+	case !a.stalls(x.t.Kind):
+		d = d.Clear(DlStall)
+	case !d.Armed(DlStall):
+		d = d.Set(DlStall, x.now.Add(x.p.StallAfter))
+	}
 	return x.sleepDeadline(a, d)
 }
 

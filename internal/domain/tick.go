@@ -76,7 +76,19 @@ func (x *tx) runDeadline(k DeadlineKind) {
 		x.onReplaceDue()
 	case DlSleep:
 		x.onSleepDue()
+	case DlStall:
+		x.onStallDue()
 	}
+}
+
+// onStallDue treats an unattended agent that never reported a turn as one whose turn ended, so the
+// done marker and the nudge ladder decide how the run ends. hc reports a level, so a turn too short
+// to show as working leaves the turn pending, and an idle report there is ignored.
+func (x *tx) onStallDue() {
+	a, _ := x.active()
+	a.Turn = Turn{State: TurnPaused}
+	x.note(EntryWarning, "The agent has not reported any work; checking whether it finished")
+	x.t.Life = x.armLadder(a, 0)
 }
 
 // onTimeout fails the run when the task's own timeout has passed.

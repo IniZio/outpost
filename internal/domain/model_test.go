@@ -436,6 +436,8 @@ func TestValidateNamesEachBrokenInvariant(t *testing.T) {
 		{"nudge while the agent works", domain.KindScheduled, withDeadline(domain.DlNudge, domain.TurnRunning)},
 		{"nudge on an attended run", domain.KindInteractive, withDeadline(domain.DlNudge, domain.TurnPaused)},
 		{"an idle unattended run with nothing to end it", domain.KindScheduled, active(domain.TurnPaused)},
+		{"a pending unattended run with no stall deadline", domain.KindScheduled, active(domain.TurnPending)},
+		{"stall deadline on an attended run", domain.KindInteractive, withDeadline(domain.DlStall, domain.TurnPending)},
 		{"sleep on an unattended run", domain.KindScheduled, withDeadline(domain.DlSleep, domain.TurnBlocked)},
 		{"sleep while working", domain.KindInteractive, withDeadline(domain.DlSleep, domain.TurnRunning)},
 		{"replace deadline without replacing", domain.KindInteractive, withDeadline(domain.DlReplace, domain.TurnPaused)},

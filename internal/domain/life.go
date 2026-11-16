@@ -230,6 +230,12 @@ const (
 	TurnBlocked
 )
 
+// stalls reports whether nothing but the stall deadline would end the run: nobody watches it, the
+// box is up, and the agent has not reported the turn it was given.
+func (a Active) stalls(k Kind) bool {
+	return k.Unattended() && a.Turn.State == TurnPending && a.Box.Want == BoxUp
+}
+
 // idle reports whether the agent has stopped without finishing: its turn ended or it asks.
 func (tn Turn) idle() bool { return tn.State == TurnPaused || tn.State == TurnBlocked }
 
