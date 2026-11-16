@@ -61,7 +61,9 @@ linters:
           files: ["**/internal/link/**"]
           list-mode: lax
           deny: *internal
-          allow: [github.com/IniZio/outpost/internal/domain]
+          allow:
+            - github.com/IniZio/outpost/internal/domain
+            - github.com/IniZio/outpost/internal/link
         machine:
           files: ["**/internal/machine/**", "**/internal/toolmachine/**"]
           list-mode: lax

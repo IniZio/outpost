@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func accepted(f *flight) *stream {
+func acceptedStream(f *flight) *stream {
 	st := &stream{fl: f}
 	st.cancel = func() {}
 	return st
@@ -13,8 +13,8 @@ func accepted(f *flight) *stream {
 
 func TestFlightSealWaitsForFiniteStreams(t *testing.T) {
 	f := newFlight(2)
-	a, b := accepted(f), accepted(f)
-	if f.enter(a) != nil || f.enter(b) != nil || f.enter(accepted(f)) == nil {
+	a, b := acceptedStream(f), acceptedStream(f)
+	if f.enter(a) != nil || f.enter(b) != nil || f.enter(acceptedStream(f)) == nil {
 		t.Fatal("the in-flight limit is the session's")
 	}
 	f.seal()
@@ -31,14 +31,14 @@ func TestFlightSealWaitsForFiniteStreams(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("idle once no finite stream is left")
 	}
-	if f.enter(accepted(f)) == nil {
+	if f.enter(acceptedStream(f)) == nil {
 		t.Fatal("a sealed flight admits nothing")
 	}
 }
 
 func TestFlightResumableStreamsDoNotHoldADrain(t *testing.T) {
 	f := newFlight(4)
-	st := accepted(f)
+	st := acceptedStream(f)
 	if f.enter(st) != nil || !f.setKind(st, kindResumable) {
 		t.Fatal("admit")
 	}
@@ -50,7 +50,7 @@ func TestFlightResumableStreamsDoNotHoldADrain(t *testing.T) {
 	}
 	f.exit(st)
 	f.cutResumable()
-	if f.setKind(accepted(f), kindResumable) {
+	if f.setKind(acceptedStream(f), kindResumable) {
 		t.Fatal("after the cut a new resumable stream must not run")
 	}
 }
