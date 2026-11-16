@@ -206,20 +206,24 @@ func TestMachineHostsOnlyItsOwnersSandboxTasks(t *testing.T) {
 	}
 }
 
-func TestRepoStartImage(t *testing.T) {
-	ready := domain.Repo{Name: "acme/app", ReadyImage: "ready:1"}
+func TestRepoReadyFor(t *testing.T) {
+	ready := domain.Repo{Name: "acme/app", ReadyImage: "ready:1", ReadyOn: "m1"}
 	tests := []struct {
-		repo domain.Repo
-		kind domain.Kind
-		want string
+		name    string
+		repo    domain.Repo
+		kind    domain.Kind
+		machine domain.MachineID
+		want    string
 	}{
-		{ready, domain.KindInteractive, "ready:1"},
-		{ready, domain.KindSetup, "base"},
-		{domain.Repo{Name: "acme/app"}, domain.KindInteractive, "base"},
+		{"on the machine that holds it", ready, domain.KindInteractive, "m1", "ready:1"},
+		{"a setup task always starts fresh", ready, domain.KindSetup, "m1", "base"},
+		{"another machine has no copy", ready, domain.KindInteractive, "m2", "base"},
+		{"no template yet", domain.Repo{Name: "acme/app"}, domain.KindInteractive, "m1", "base"},
+		{"a template of no known machine", domain.Repo{ReadyImage: "ready:1"}, domain.KindInteractive, "m1", "base"},
 	}
 	for _, tc := range tests {
-		if got := tc.repo.StartImage(tc.kind, "base"); got != tc.want {
-			t.Errorf("StartImage(%v) = %q, want %q", tc.kind, got, tc.want)
+		if got := tc.repo.ReadyFor(tc.kind, "base", tc.machine); got != tc.want {
+			t.Errorf("%s: ReadyFor = %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }
@@ -275,7 +279,7 @@ func TestPickStarts(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := domain.PickStarts(tc.tasks, tc.machines, tc.cap); !slices.Equal(got, tc.want) {
+			if got := domain.PickStarts(tc.tasks, tc.machines, nil, tc.cap); !slices.Equal(got, tc.want) {
 				t.Errorf("PickStarts = %v, want %v", got, tc.want)
 			}
 		})
@@ -311,7 +315,7 @@ func TestPickStartsStartsNothing(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := domain.PickStarts(tc.tasks, tc.machines, tc.cap); len(got) != 0 {
+			if got := domain.PickStarts(tc.tasks, tc.machines, nil, tc.cap); len(got) != 0 {
 				t.Errorf("PickStarts = %v, want nothing", got)
 			}
 		})
@@ -323,10 +327,39 @@ func TestPickStartsSpreadsAcrossMachinesOfTheOwner(t *testing.T) {
 		{ID: "m1", Owner: owner, Role: domain.RoleSandbox, Slots: 1},
 		{ID: "m2", Owner: owner, Role: domain.RoleSandbox, Slots: 1},
 	}
-	got := domain.PickStarts([]domain.Task{queuedTask(1, owner), queuedTask(2, owner), queuedTask(3, owner)}, machines, domain.Capacity{Max: 9})
+	got := domain.PickStarts([]domain.Task{queuedTask(1, owner), queuedTask(2, owner), queuedTask(3, owner)}, machines, nil, domain.Capacity{Max: 9})
 	want := []domain.Placement{{Task: 1, Machine: "m1"}, {Task: 2, Machine: "m2"}}
 	if !slices.Equal(got, want) {
 		t.Errorf("PickStarts = %v, want %v", got, want)
+	}
+}
+
+func TestPickStartsPrefersTheMachineHoldingTheReadyTemplate(t *testing.T) {
+	machines := []domain.Machine{
+		{ID: "m1", Owner: owner, Role: domain.RoleSandbox, Slots: 1},
+		{ID: "m2", Owner: owner, Role: domain.RoleSandbox, Slots: 1},
+	}
+	repos := []domain.Repo{{Name: "acme/app", ReadyImage: "ready:1", ReadyOn: "m2"}}
+	setup := newTask(3, domain.KindSetup, spec())
+	tests := []struct {
+		name  string
+		tasks []domain.Task
+		want  []domain.Placement
+	}{
+		{"it goes where the template is", []domain.Task{queuedTask(1, owner)}, []domain.Placement{{Task: 1, Machine: "m2"}}},
+		{"the next one falls back to the base image elsewhere", []domain.Task{queuedTask(1, owner), queuedTask(2, owner)}, []domain.Placement{{Task: 1, Machine: "m2"}, {Task: 2, Machine: "m1"}}},
+		{"a setup task starts fresh, so any machine will do", []domain.Task{setup}, []domain.Placement{{Task: 3, Machine: "m1"}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := domain.PickStarts(tc.tasks, machines, repos, domain.Capacity{Max: 9}); !slices.Equal(got, tc.want) {
+				t.Errorf("PickStarts = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	offline := machines[:1]
+	if got := domain.PickStarts([]domain.Task{queuedTask(1, owner)}, offline, repos, domain.Capacity{Max: 9}); len(got) != 1 || got[0].Machine != "m1" {
+		t.Errorf("PickStarts = %v: with the template's machine gone the task starts from the base image", got)
 	}
 }
 

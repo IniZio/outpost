@@ -29,18 +29,21 @@ func (m Machine) CanHost(t Task) bool {
 	return m.Role == RoleSandbox && m.Owner == t.Owner
 }
 
-// Repo is a repo Outpost works on. ReadyImage is the saved template new tasks start from.
+// Repo is a repo Outpost works on. ReadyImage is the saved template new tasks start from, and
+// ReadyOn is the machine that holds it: a template is an image on one machine's disk.
 type Repo struct {
 	Name       RepoName
 	ReadyImage string
+	ReadyOn    MachineID
 	ReadyAt    time.Time
 	Notes      string
 	SetupTask  TaskID
 }
 
-// StartImage picks the image a new task starts from. A setup task always starts fresh.
-func (r Repo) StartImage(k Kind, base string) string {
-	if k == KindSetup || r.ReadyImage == "" {
+// ReadyFor picks the image a task starts from on machine m. A setup task always starts fresh, and
+// a template is used only on the machine that holds it.
+func (r Repo) ReadyFor(k Kind, base string, m MachineID) string {
+	if k == KindSetup || r.ReadyImage == "" || r.ReadyOn != m {
 		return base
 	}
 	return r.ReadyImage

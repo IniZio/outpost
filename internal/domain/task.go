@@ -212,9 +212,11 @@ type Placement struct {
 }
 
 // PickStarts returns the queued tasks to start now, lowest id first, each with a machine that may
-// host it, up to the free slots. The lifecycle feeds each result SlotGranted. Two callers racing
-// on the same id is safe: the second SlotGranted finds the task no longer Queued and is dropped.
-func PickStarts(tasks []Task, machines []Machine, c Capacity) []Placement {
+// host it, up to the free slots. A task goes to the machine holding its repo's ready template when
+// that machine has room, and otherwise to any machine, where it starts from the base image. The
+// lifecycle feeds each result SlotGranted. Two callers racing on the same id is safe: the second
+// SlotGranted finds the task no longer Queued and is dropped.
+func PickStarts(tasks []Task, machines []Machine, repos []Repo, c Capacity) []Placement {
 	if c.Hold {
 		return nil
 	}
@@ -233,20 +235,26 @@ func PickStarts(tasks []Task, machines []Machine, c Capacity) []Placement {
 		}
 	}
 	slices.SortFunc(queued, func(a, b Task) int { return cmp.Compare(a.ID, b.ID) })
-	return place(queued, machines, used, free)
+	return place(queued, machines, readyOn(repos), used, free)
+}
+
+func readyOn(repos []Repo) map[RepoName]MachineID {
+	ready := make(map[RepoName]MachineID, len(repos))
+	for _, r := range repos {
+		ready[r.Name] = r.ReadyOn
+	}
+	return ready
 }
 
 // place pairs queued tasks with hosting machines until the free slots or the machines run out. A
 // task no machine can host stays queued and does not use a free slot.
-func place(queued []Task, machines []Machine, used map[MachineID]int, free int) []Placement {
+func place(queued []Task, machines []Machine, ready map[RepoName]MachineID, used map[MachineID]int, free int) []Placement {
 	var out []Placement
 	for _, t := range queued {
 		if free <= 0 {
 			break
 		}
-		i := slices.IndexFunc(machines, func(m Machine) bool {
-			return m.CanHost(t) && used[m.ID] < m.Slots
-		})
+		i := hostFor(t, machines, ready[t.Spec.Repo], used)
 		if i < 0 {
 			continue
 		}
@@ -255,4 +263,17 @@ func place(queued []Task, machines []Machine, used map[MachineID]int, free int) 
 		out = append(out, Placement{Task: t.ID, Machine: machines[i].ID})
 	}
 	return out
+}
+
+// hostFor returns the index of the machine that should host t: the one holding its ready template
+// if it can take the task, else the first that can. A setup task starts fresh, so it has no
+// preference.
+func hostFor(t Task, machines []Machine, readyOn MachineID, used map[MachineID]int) int {
+	fits := func(m Machine) bool { return m.CanHost(t) && used[m.ID] < m.Slots }
+	if readyOn != "" && t.Kind != KindSetup {
+		if i := slices.IndexFunc(machines, func(m Machine) bool { return m.ID == readyOn && fits(m) }); i >= 0 {
+			return i
+		}
+	}
+	return slices.IndexFunc(machines, fits)
 }
