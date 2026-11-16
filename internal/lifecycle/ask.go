@@ -124,18 +124,18 @@ func (r *Runner) plan(ctx context.Context, t domain.Task, run domain.AgentRun, g
 		return ports.Plan{}, fmt.Errorf("lifecycle: agent launch: %w", err)
 	}
 	repos := append([]domain.RepoName{t.Spec.Repo}, t.Spec.Also...)
-	secrets, err := r.cfg.Secrets.Placeholders(ctx, t.Owner, repos)
+	creds, err := r.cfg.Secrets.Credentials(ctx, tg, t.Owner, repos)
 	if err != nil {
-		return ports.Plan{}, fmt.Errorf("lifecycle: credential placeholders: %w", err)
+		return ports.Plan{}, fmt.Errorf("lifecycle: credentials: %w", err)
 	}
-	env := maps.Clone(secrets)
+	env := maps.Clone(creds.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
 	maps.Copy(env, launch.Env)
 	return ports.Plan{
 		Target: tg, Image: repo.ReadyFor(t.Kind, r.cfg.BaseImage, t.Machine), Fresh: fresh,
-		Repos: repos, Env: env, Launch: launch,
+		Repos: repos, Env: env, CA: creds.CA, Launch: launch,
 	}, nil
 }
 

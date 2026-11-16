@@ -7,7 +7,19 @@ import (
 	"time"
 
 	"github.com/IniZio/outpost/internal/domain"
+	"github.com/IniZio/outpost/internal/ports"
 )
+
+// The plan's credentials are asked for the plan's own target, and carry the proxy CA.
+func TestCredentialsAreBoundToThePlan(t *testing.T) {
+	g := newRig(t, newStore())
+	g.created(domain.KindScheduled)
+	g.pass()
+	p := calls(g.boxes, "Converge")[0].Plan
+	if string(p.CA) != "fake ca" || !slices.Equal(g.secrets.Targets(), []ports.Target{p.Target}) {
+		t.Fatalf("credentials for %v, CA %q, plan target %v", g.secrets.Targets(), p.CA, p.Target)
+	}
+}
 
 // A schedule fires, the task is placed, starts, works, marks itself done and is cleaned up a day
 // later.

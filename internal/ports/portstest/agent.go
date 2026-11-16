@@ -3,6 +3,7 @@ package portstest
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/IniZio/outpost/internal/domain"
@@ -66,25 +67,34 @@ func (a *Agent) LastMessage(context.Context, ports.BoxFS, ports.Target) (string,
 	return a.summary, a.summaryErr
 }
 
-// Secrets hands out one placeholder, or fails.
+// Secrets hands out one placeholder and a CA, or fails. It records the targets it was asked for.
 type Secrets struct {
-	mu  sync.Mutex
-	err error
+	mu      sync.Mutex
+	err     error
+	targets []ports.Target
 }
 
-// Fail makes Placeholders fail with err until it is called with nil.
+// Fail makes Credentials fail with err until it is called with nil.
 func (s *Secrets) Fail(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.err = err
 }
 
-// Placeholders returns GH_TOKEN set to a placeholder.
-func (s *Secrets) Placeholders(context.Context, domain.Login, []domain.RepoName) (map[string]string, error) {
+// Credentials returns GH_TOKEN set to a placeholder and a fake CA.
+func (s *Secrets) Credentials(_ context.Context, t ports.Target, _ domain.Login, _ []domain.RepoName) (ports.Creds, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.err != nil {
-		return nil, s.err
+		return ports.Creds{}, s.err
 	}
-	return map[string]string{"GH_TOKEN": "outpost-placeholder"}, nil
+	s.targets = append(s.targets, t)
+	return ports.Creds{Env: map[string]string{"GH_TOKEN": "outpost-placeholder"}, CA: []byte("fake ca")}, nil
+}
+
+// Targets lists the targets Credentials handed out for, in order.
+func (s *Secrets) Targets() []ports.Target {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.targets)
 }

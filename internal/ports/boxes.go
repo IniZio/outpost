@@ -30,6 +30,7 @@ type Plan struct {
 	Fresh  bool              // create volumes, clone and seed home; else reuse them
 	Repos  []domain.RepoName // Spec.Repo first, then Spec.Also, each pushable
 	Env    map[string]string // credential placeholders; the proxy swaps in the real secrets
+	CA     []byte            // the proxy's CA, trusted before the first clone; nil for none
 	Launch Launch            // the agent terminal, labelled with Target.Run
 }
 

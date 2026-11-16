@@ -43,6 +43,7 @@ type ConvergeReq struct {
 	Fresh  bool              `json:"fresh"`
 	Repos  []domain.RepoName `json:"repos"`
 	Env    map[string]string `json:"env"`
+	CA     []byte            `json:"ca,omitempty"`
 	Argv   []string          `json:"argv"`
 	Home   []HomeFile        `json:"home"`
 	Budget time.Duration     `json:"budget"`

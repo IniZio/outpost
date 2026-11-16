@@ -364,7 +364,7 @@ func TestBoxesSignalWaitsForAWatchAndStopsAfterIt(t *testing.T) {
 	}
 }
 
-func TestAgentAndSecrets(t *testing.T) {
+func TestAgent(t *testing.T) {
 	ctx := context.Background()
 	a := &portstest.Agent{}
 	f := ports.LaunchFor{Target: target(1, 2, 1), Owner: "ana", Prompt: "go"}
@@ -386,12 +386,21 @@ func TestAgentAndSecrets(t *testing.T) {
 	if s, err := a.LastMessage(ctx, nil, f.Target); s != "done" || !errors.Is(err, boom) {
 		t.Fatalf("%q %v", s, err)
 	}
+}
+
+func TestSecrets(t *testing.T) {
+	ctx := context.Background()
+	boom := errors.New("boom")
+	f := ports.LaunchFor{Target: target(1, 2, 1)}
 	s := &portstest.Secrets{}
-	if p, err := s.Placeholders(ctx, "ana", nil); err != nil || p["GH_TOKEN"] == "" {
-		t.Fatalf("%v %v", p, err)
+	if c, err := s.Credentials(ctx, f.Target, "ana", nil); err != nil || c.Env["GH_TOKEN"] == "" || len(c.CA) == 0 {
+		t.Fatalf("%v %v", c, err)
+	}
+	if got := s.Targets(); len(got) != 1 || got[0] != f.Target {
+		t.Fatalf("targets %v", got)
 	}
 	s.Fail(boom)
-	if _, err := s.Placeholders(ctx, "ana", nil); !errors.Is(err, boom) {
+	if _, err := s.Credentials(ctx, f.Target, "ana", nil); !errors.Is(err, boom) {
 		t.Fatal(err)
 	}
 }

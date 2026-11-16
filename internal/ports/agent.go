@@ -42,8 +42,16 @@ type Agent interface {
 	LastMessage(ctx context.Context, fs BoxFS, t Target) (string, error)
 }
 
-// Secrets hands out the credential placeholders a box sees. The proxy swaps each for the real
-// secret on the way out, so no secret enters a box.
+// Creds is what a box needs to reach the credential proxy: env with placeholders and the proxy
+// login, and the proxy's public CA, which the box trusts before its first clone.
+type Creds struct {
+	Env map[string]string
+	CA  []byte
+}
+
+// Secrets hands out the credentials a box sees. The proxy swaps each placeholder for the real
+// secret on the way out, so no secret enters a box. The proxy login is bound to t, so it stops
+// working once that box generation is gone.
 type Secrets interface {
-	Placeholders(ctx context.Context, owner domain.Login, repos []domain.RepoName) (map[string]string, error)
+	Credentials(ctx context.Context, t Target, owner domain.Login, repos []domain.RepoName) (Creds, error)
 }
