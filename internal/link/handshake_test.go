@@ -25,6 +25,7 @@ type fakeStore struct {
 	known       bool
 	lookupErr   error
 	linkedErr   error
+	seenErr     error
 	linked      int
 	unlinkedGen []domain.LinkGen
 	// afterFirstLookup runs once, after the first Lookup has answered, to land a revoke inside the
@@ -69,6 +70,12 @@ func (f *fakeStore) Unlinked(_ context.Context, _ domain.MachineID, gen domain.L
 	defer f.mu.Unlock()
 	f.unlinkedGen = append(f.unlinkedGen, gen)
 	return nil
+}
+
+func (f *fakeStore) Seen(context.Context, domain.MachineID) (bool, time.Time, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return false, time.Time{}, f.seenErr
 }
 
 func (f *fakeStore) linkedCount() int {
@@ -434,5 +441,14 @@ func TestAttachKeepsTheHigherGeneration(t *testing.T) {
 	}
 	if got := l.attach(&session{info: Info{Gen: 7}}); got != s6 {
 		t.Fatal("a later generation replaces the route")
+	}
+}
+
+func TestCallForAMachineWhosePresenceCannotBeReadFailsOffline(t *testing.T) {
+	th := newTestHub(t, nil)
+	th.store.seenErr = errors.New("store down")
+	_, err := Call(context.Background(), th.hub.Link("m1"), tEcho, struct{ S string }{})
+	if !errors.Is(err, ErrOffline) || !errors.Is(err, th.store.seenErr) || !retryable(err) {
+		t.Fatalf("an unreadable store reads as offline, and Hold retries it: %v", err)
 	}
 }

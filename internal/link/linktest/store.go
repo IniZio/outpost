@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/IniZio/outpost/internal/domain"
 )
@@ -15,6 +16,7 @@ import (
 type Store struct {
 	mu       sync.Mutex
 	next     int
+	clock    domain.SystemClock
 	machines map[domain.MachineID]*row
 }
 
@@ -23,6 +25,7 @@ type row struct {
 	key    domain.MachineKey
 	gen    domain.LinkGen
 	online bool
+	since  time.Time
 }
 
 // NewStore returns an empty store.
@@ -74,6 +77,7 @@ func (s *Store) Linked(_ context.Context, id domain.MachineID, _ string) (domain
 	}
 	r.gen++
 	r.online = true
+	r.since = s.clock.Now()
 	return r.gen, nil
 }
 
@@ -83,8 +87,19 @@ func (s *Store) Unlinked(_ context.Context, id domain.MachineID, gen domain.Link
 	defer s.mu.Unlock()
 	if r, ok := s.machines[id]; ok && r.gen == gen {
 		r.online = false
+		r.since = s.clock.Now()
 	}
 	return nil
+}
+
+// Seen implements link.Presence.
+func (s *Store) Seen(_ context.Context, id domain.MachineID) (bool, time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r, ok := s.machines[id]; ok {
+		return r.online, r.since, nil
+	}
+	return false, time.Time{}, nil
 }
 
 // Online reports whether the store thinks the machine has a live link.

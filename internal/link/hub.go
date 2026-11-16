@@ -37,7 +37,6 @@ type HubConfig struct {
 // one process is active at a time: a deploy overlaps the old and the new for the drain budget.
 type Hub struct {
 	cfg      HubConfig
-	born     time.Time
 	draining atomic.Bool
 	pending  chan struct{} // capacity bounds handshakes in progress
 	mu       sync.Mutex
@@ -65,7 +64,7 @@ func NewHub(cfg HubConfig) (*Hub, error) {
 	if cfg.Log == nil {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Hub{cfg: cfg, born: cfg.Clock.Now(), pending: make(chan struct{}, 64), links: map[domain.MachineID]*Link{}}, nil
+	return &Hub{cfg: cfg, pending: make(chan struct{}, 64), links: map[domain.MachineID]*Link{}}, nil
 }
 
 // Handler is the WebSocket endpoint, mounted at /machines/link by cmd/outpost. The api package
@@ -167,7 +166,7 @@ func (h *Hub) Link(id domain.MachineID) *Link {
 	defer h.mu.Unlock()
 	l, ok := h.links[id]
 	if !ok {
-		l = &Link{id: id, hub: h, changed: make(chan struct{}), movingUntil: h.born.Add(h.cfg.Timing.LinkWait)}
+		l = &Link{id: id, hub: h, changed: make(chan struct{})}
 		h.links[id] = l
 	}
 	return l
@@ -250,10 +249,9 @@ type Link struct {
 	hub *Hub
 	cur atomic.Pointer[session] // read lock-free by every Call
 
-	mu          sync.Mutex // guards the three fields below, and orders attach and detach
-	changed     chan struct{}
-	movingUntil time.Time // while the clock is before this, an offline machine's link is moving
-	gone        bool      // Kick ended the link: do not wait for it to return
+	mu      sync.Mutex // guards the two fields below, and orders attach and detach
+	changed chan struct{}
+	gone    bool // Kick ended the link: do not wait for it to return
 }
 
 // Machine is the id this link is for.
@@ -273,42 +271,63 @@ func (l *Link) pacer() pacer {
 	return pacer{backoff: c.Backoff, sleep: c.Sleep, jitter: c.Jitter, clock: c.Clock}
 }
 
-// session routes a new op. A machine whose link is moving, because this hub just started in a
-// deploy overlap or the machine's link just dropped, is waited for up to Timing.LinkWait. Any other
-// offline machine fails at once.
+// session routes a new op. A machine with no session here is waited for when the store says its link
+// is elsewhere or went down less than Timing.LinkWait ago: it is about to relink, here or to another
+// process. Any other offline machine fails at once. The store spans processes, and a deploy overlaps
+// them, so a hub's own age says nothing about whether a link is moving.
 func (l *Link) session(ctx context.Context) (*session, error) {
+	start := l.hub.cfg.Clock.Now()
 	for {
 		if l.hub.draining.Load() {
 			return nil, ErrDraining
 		}
-		s, changed, wait := l.look()
+		s, changed, gone := l.look()
 		if s != nil {
 			return s, nil
 		}
-		if wait <= 0 {
+		if gone {
 			return nil, ErrOffline
 		}
-		if err := l.await(ctx, changed, wait); err != nil {
+		if err := l.await(ctx, changed, start); err != nil {
 			return nil, err
 		}
 	}
 }
 
-// look returns the live session, or how long the machine's link may still be moving and the
-// channel that closes when a link attaches.
-func (l *Link) look() (*session, <-chan struct{}, time.Duration) {
+// look returns the live session, whether Kick ended the link, and the channel that closes when a
+// link attaches. The channel is taken before the store is read, so an attach in between is not lost.
+func (l *Link) look() (*session, <-chan struct{}, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if s := l.cur.Load(); s != nil && !s.mux.IsClosed() {
-		return s, nil, 0
+		return s, nil, false
 	}
-	if l.gone {
-		return nil, nil, 0
-	}
-	return nil, l.changed, l.movingUntil.Sub(l.hub.cfg.Clock.Now())
+	return nil, l.changed, l.gone
 }
 
-func (l *Link) await(ctx context.Context, changed <-chan struct{}, wait time.Duration) error {
+// moving is how much longer a Call that began at start may wait for the machine's link. A failed
+// read is treated as offline, so the caller fails with ErrOffline, which Hold retries.
+func (l *Link) moving(ctx context.Context, start time.Time) (time.Duration, error) {
+	linked, since, err := l.hub.cfg.Presence.Seen(ctx, l.id)
+	if err != nil {
+		return 0, fmt.Errorf("%w: presence: %w", ErrOffline, err)
+	}
+	if linked {
+		since = start
+	}
+	return since.Add(l.hub.cfg.Timing.LinkWait).Sub(l.hub.cfg.Clock.Now()), nil
+}
+
+// await waits for a link to attach, for as long as the machine's link may still be moving. It
+// returns nil when one attached, and ErrOffline when none is expected or none came in time.
+func (l *Link) await(ctx context.Context, changed <-chan struct{}, start time.Time) error {
+	wait, err := l.moving(ctx, start)
+	if err != nil {
+		return err
+	}
+	if wait <= 0 {
+		return ErrOffline
+	}
 	t := time.NewTimer(wait)
 	defer t.Stop()
 	select {
@@ -338,15 +357,11 @@ func (l *Link) attach(s *session) (retire *session) {
 	return retire
 }
 
-// detach clears s if it is still the route, starts the link-moving window and records the machine
-// offline for s's generation. A late close of a replaced session finds a different route and does
+// detach clears s if it is still the route and records the machine offline for s's generation. A late close of a replaced session finds a different route and does
 // nothing here, and a stale generation does nothing in the store.
 func (l *Link) detach(s *session) {
 	l.mu.Lock()
 	cleared := l.cur.CompareAndSwap(s, nil)
-	if cleared && !l.gone {
-		l.movingUntil = l.hub.cfg.Clock.Now().Add(l.hub.cfg.Timing.LinkWait)
-	}
 	l.mu.Unlock()
 	if cleared {
 		l.hub.unlinked(l.id, s.info.Gen)

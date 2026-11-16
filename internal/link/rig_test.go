@@ -241,24 +241,63 @@ func TestCallDuringTheDeployOverlapWaitsForTheLinkToMove(t *testing.T) {
 	}
 }
 
-func TestAnOfflineMachineFailsFastOnceTheOverlapWindowIsOver(t *testing.T) {
+func TestCallOnANewServerWaitsForAMachineStillLinkedToTheOldOne(t *testing.T) {
+	rig, _ := newRig(t, func(o *linktest.Options) {
+		o.Timing = linktest.FastTiming()
+		o.Timing.LinkWait = 500 * time.Millisecond
+	})
+	old := rig.Hub
+	next := rig.NextHub()
+	time.Sleep(600 * time.Millisecond)
+	got := make(chan error, 1)
+	go func() {
+		_, err := link.Call(deadline(t, 10*time.Second), next.Link(rig.Machine), echo, text{"x"})
+		got <- err
+	}()
+	select {
+	case err := <-got:
+		t.Fatalf("a machine the store says is linked elsewhere must be waited for, got %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	go func() { _ = old.Drain(deadline(t, 5*time.Second)) }()
+	if err := <-got; err != nil {
+		t.Fatalf("the call must complete once the agent relinks: %v", err)
+	}
+}
+
+func TestCallFailsAtOnceForAMachineOfflineLongerThanTheLinkWait(t *testing.T) {
 	rig, _ := newRig(t, func(o *linktest.Options) {
 		o.Timing = linktest.FastTiming()
 		o.Timing.LinkWait = 150 * time.Millisecond
 	})
-	ghost := rig.Hub.Link("nobody")
+	rig.Stop()
+	if !linktest.Eventually(func() bool { return !rig.Store.Online(rig.Machine) }) {
+		t.Fatal("the store must learn the machine went offline")
+	}
+	l := rig.Hub.Link(rig.Machine)
 	start := clock.Now()
-	if _, err := link.Call(deadline(t, 5*time.Second), ghost, echo, text{}); !errors.Is(err, link.ErrOffline) {
+	if _, err := link.Call(deadline(t, 5*time.Second), l, echo, text{}); !errors.Is(err, link.ErrOffline) {
 		t.Fatalf("got %v", err)
 	}
-	if took := clock.Now().Sub(start); took < 100*time.Millisecond || took > 2*time.Second {
-		t.Fatalf("the first call waits out the link wait: %v", took)
+	if took := clock.Now().Sub(start); took < 50*time.Millisecond || took > 2*time.Second {
+		t.Fatalf("a machine that just dropped is waited for, up to the link wait: %v", took)
 	}
 	time.Sleep(200 * time.Millisecond)
 	start = clock.Now()
-	_, err := link.Call(deadline(t, 5*time.Second), ghost, echo, text{})
-	if !errors.Is(err, link.ErrOffline) || clock.Now().Sub(start) > 100*time.Millisecond {
-		t.Fatalf("after the window an offline machine fails at once: %v in %v", err, clock.Now().Sub(start))
+	_, err := link.Call(deadline(t, 5*time.Second), l, echo, text{})
+	if !errors.Is(err, link.ErrOffline) || clock.Now().Sub(start) > 50*time.Millisecond {
+		t.Fatalf("after the link wait an offline machine fails at once: %v in %v", err, clock.Now().Sub(start))
+	}
+}
+
+func TestCallFailsAtOnceForAMachineThatNeverLinked(t *testing.T) {
+	rig, _ := newRig(t, nil)
+	start := clock.Now()
+	if _, err := link.Call(deadline(t, 5*time.Second), rig.Hub.Link("nobody"), echo, text{}); !errors.Is(err, link.ErrOffline) {
+		t.Fatalf("got %v", err)
+	}
+	if clock.Now().Sub(start) > 50*time.Millisecond {
+		t.Fatal("a machine the store never saw has no link to wait for")
 	}
 }
 
@@ -266,7 +305,7 @@ func TestCallStopsWaitingWhenItsContextEnds(t *testing.T) {
 	rig, _ := newRig(t, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if _, err := link.Call(ctx, rig.Hub.Link("nobody"), echo, text{}); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := link.Call(ctx, rig.NextHub().Link(rig.Machine), echo, text{}); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("got %v", err)
 	}
 }
