@@ -242,6 +242,7 @@ func (f *fuzzer) checkApplied(ev domain.Event, res domain.Result) {
 	}
 	f.checkDuplicate(ev, res.Task)
 	f.checkBoxStopped(ev, res)
+	f.checkFailedAnswers(res)
 	f.task = res.Task
 	f.effects = append(f.effects, res.Effects...)
 	f.effects = f.effects[max(0, len(f.effects)-16):]
@@ -259,6 +260,28 @@ func (f *fuzzer) checkBoxStopped(ev domain.Event, res domain.Result) {
 	abandoned := wasWaking && s.Resume != nil && endedNow
 	if (abandoned || wasEnded && isEnsured) && res.Task.BoxWant() == domain.BoxStopped && !has[domain.StopBox](res.Effects) {
 		f.t.Fatalf("%T left a woken box running: effects %q", ev, kinds(res.Effects))
+	}
+}
+
+// checkFailedAnswers feeds the neutral answer for each ask the step made and requires it to be
+// safe: never refused, and a valid task when applied. This is what lets the lifecycle answer an ask
+// whose port call failed.
+func (f *fuzzer) checkFailedAnswers(res domain.Result) {
+	f.t.Helper()
+	for _, e := range res.Effects {
+		ev, ok := domain.FailedAnswer(e, "boom")
+		if !ok {
+			continue
+		}
+		got, err := domain.Apply(res.Task, ev, f.now, f.policy)
+		if err != nil {
+			f.t.Fatalf("the failed answer to %T was refused: %v", e, err)
+		}
+		if got.Dropped == domain.Applied {
+			if err := got.Task.Validate(); err != nil {
+				f.t.Fatalf("the failed answer to %T made an invalid task: %v", e, err)
+			}
+		}
 	}
 }
 
