@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"time"
 
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/ports"
@@ -85,6 +86,10 @@ func (r *Runner) List(ctx context.Context, q TaskQuery) ([]domain.Task, error) {
 	return ts, nil
 }
 
+// followPoll is how often Follow reads the timeline again without a nudge. A standby process gets
+// no nudges, because the leader commits, so this is what keeps a follower on a standby current.
+const followPoll = 2 * time.Second
+
 // Follow yields a task's timeline entries after the first `after`, then each new entry as it is
 // committed, until ctx ends or the consumer stops. A failure to read is yielded once and ends the
 // sequence. A consumer that resumes passes the Seq of the last Row it saw.
@@ -99,6 +104,7 @@ func (r *Runner) Follow(ctx context.Context, id domain.TaskID, after int) iter.S
 		for r.stream(ctx, id, &after, yield) {
 			select {
 			case <-nudge:
+			case <-time.After(followPoll):
 			case <-ctx.Done():
 				return
 			}
@@ -126,6 +132,29 @@ func (r *Runner) stream(ctx context.Context, id domain.TaskID, after *int, yield
 		}
 	}
 }
+
+// Screen reads the agent terminal of the task's current run, with lines of history above the
+// screen. A task that never got a box, or whose box is gone, has an empty screen.
+func (r *Runner) Screen(ctx context.Context, id domain.TaskID, lines int) (string, error) {
+	t, err := r.Task(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if t.Machine == "" || t.BoxWant() == domain.BoxReleased {
+		return "", nil
+	}
+	s, err := r.cfg.Boxes.Screen(ctx, target(t), lines)
+	if err != nil {
+		return "", fmt.Errorf("lifecycle: screen of task %d: %w", id, err)
+	}
+	return s, nil
+}
+
+// Leading reports whether this process holds the lease and drives tasks.
+func (r *Runner) Leading() bool { return r.lead.Load() }
+
+// Started is closed once Run holds the lease and has recovered every unfinished task.
+func (r *Runner) Started() <-chan struct{} { return r.started }
 
 // Poke asks for a scheduler pass soon. cmd/outpost calls it when a machine links or unlinks and
 // when box images finish building. Pokes coalesce: many before a pass cause one pass.

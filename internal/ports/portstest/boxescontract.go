@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ func BoxesContract(t *testing.T, newRig func(t *testing.T) BoxesRig) {
 		"Files":                boxesFiles,
 		"WatchDeliversReports": boxesWatch,
 		"MissingBoxIsNoError":  boxesMissing,
+		"ScreenShowsTyping":    boxesScreen,
 	}
 	for name, run := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -229,5 +231,31 @@ func boxesMissing(t *testing.T, r BoxesRig) {
 	}
 	if s, err := r.Boxes.Inspect(ctx, tg); err != nil || s.Running {
 		t.Fatalf("no box is not running: %+v %v", s, err)
+	}
+	if s, err := r.Boxes.Screen(ctx, tg, 10); err != nil || s != "" {
+		t.Fatalf("no box has an empty screen: %q %v", s, err)
+	}
+}
+
+func boxesScreen(t *testing.T, r BoxesRig) {
+	tg := target(r, 8, 1, 1)
+	converge(t, r, tg, true)
+	ctx := boxesCtx(t)
+	if err := r.Boxes.Type(ctx, tg, "look-at-me"); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		s, err := r.Boxes.Screen(ctx, tg, 50)
+		if err != nil {
+			t.Fatalf("screen: %v", err)
+		}
+		if strings.Contains(s, "look-at-me") {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("the screen never showed what was typed: %q", s)
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }

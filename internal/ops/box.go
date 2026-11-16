@@ -151,7 +151,27 @@ type (
 	SaveResp struct {
 		Handle string `json:"handle"`
 	}
+	// ScreenReq asks for the agent terminal's screen plus Lines of history above it.
+	ScreenReq struct {
+		Box   BoxRef `json:"box"`
+		Lines int    `json:"lines"`
+	}
+	// ScreenResp is the terminal's text, empty when the box or the terminal is gone.
+	ScreenResp struct {
+		Text string `json:"text"`
+	}
 )
+
+// MaxScreenLines bounds the history one box.screen reads, so the reply fits a link frame.
+const MaxScreenLines = 2000
+
+// Validate refuses a screen read without a box or with too much history.
+func (r ScreenReq) Validate() error {
+	if r.Lines < 0 || r.Lines > MaxScreenLines {
+		return fmt.Errorf("screen lines must be 0 to %d", MaxScreenLines)
+	}
+	return r.Box.Validate()
+}
 
 // Validate refuses a request without a box.
 func (r TypeReq) Validate() error { return r.Box.Validate() }
@@ -231,6 +251,9 @@ var (
 	// BoxObserve reports the agent terminal of the ref's run. BoxInspect reports the settled box.
 	BoxObserve = link.NewOp[BoxRef, ObserveResp](cat, "box.observe", link.ServedByAgent)
 	BoxInspect = link.NewOp[BoxRef, InspectResp](cat, "box.inspect", link.ServedByAgent)
+
+	// BoxScreen reads the agent terminal of the ref's run as text: hc's terminal.read.
+	BoxScreen = link.NewOp[ScreenReq, ScreenResp](cat, "box.screen", link.ServedByAgent)
 
 	// BoxStop and BoxRelease preempt any job for the box first and wait for it to end.
 	BoxStop    = link.NewOp[BoxRef, struct{}](cat, "box.stop", link.ServedByAgent)

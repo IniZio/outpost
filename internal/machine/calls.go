@@ -38,6 +38,7 @@ func (m *Machine) Register(r *link.Registry) {
 	})
 	link.Handle(r, ops.BoxObserve, m.observe)
 	link.Handle(r, ops.BoxInspect, m.inspect)
+	link.Handle(r, ops.BoxScreen, m.screen)
 	link.Handle(r, ops.BoxStop, func(ctx context.Context, _ link.Meta, q ops.BoxRef) (struct{}, error) {
 		return struct{}{}, wire(m.exclusive(ctx, q.Task, func(ctx context.Context) error {
 			return m.cfg.Sandbox.Stop(ctx, key(q))
@@ -119,6 +120,27 @@ func (m *Machine) observe(ctx context.Context, _ link.Meta, r ops.BoxRef) (ops.O
 		out = ops.ObserveResp{Present: true, Finished: !t.Live()}
 		if !t.Live() {
 			out.ExitCode = t.Code()
+		}
+		return nil
+	})
+	return out, wire(err)
+}
+
+// screen reads the run's newest terminal, live or finished, and keeps the tail that fits a reply.
+func (m *Machine) screen(ctx context.Context, _ link.Meta, q ops.ScreenReq) (ops.ScreenResp, error) {
+	var out ops.ScreenResp
+	_, err := m.withHC(ctx, q.Box, func(c *hc.Conn) error {
+		ts, err := runTerminals(ctx, c, q.Box)
+		if err != nil || len(ts) == 0 {
+			return err
+		}
+		r, err := c.Read(ctx, ts[len(ts)-1].Address, q.Lines)
+		if err != nil {
+			return gone(err)
+		}
+		out.Text = r.Text
+		if len(out.Text) > maxRead {
+			out.Text = out.Text[len(out.Text)-maxRead:]
 		}
 		return nil
 	})

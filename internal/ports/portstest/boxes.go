@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/IniZio/outpost/internal/domain"
@@ -288,6 +289,25 @@ func (b *Boxes) Observe(ctx context.Context, t ports.Target) (domain.AgentObserv
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.obs[t.Task], nil
+}
+
+// Screen shows what was typed to the target's run, as a terminal echoes it, while its box exists.
+func (b *Boxes) Screen(ctx context.Context, t ports.Target, _ int) (string, error) {
+	if err := b.begin(ctx, Call{Method: "Screen", Target: t}); err != nil {
+		return "", err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if bx := b.boxes[t.Task]; bx == nil || bx.released || bx.gen == 0 {
+		return "", nil
+	}
+	var lines []string
+	for _, c := range b.calls {
+		if c.Method == "Type" && c.Target.Task == t.Task && c.Target.Run == t.Run {
+			lines = append(lines, c.Text)
+		}
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 // Inspect reports a running box unless the box was stopped or released, or SetInspect said

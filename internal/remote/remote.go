@@ -186,6 +186,12 @@ func (b *Boxes) Observe(ctx context.Context, t ports.Target) (domain.AgentObserv
 	return domain.AgentObservation{Present: r.Present, Finished: r.Finished, ExitCode: r.ExitCode}, wrap("observe", err)
 }
 
+// Screen reads the agent terminal of t.Run as text.
+func (b *Boxes) Screen(ctx context.Context, t ports.Target, lines int) (string, error) {
+	r, err := link.Call(ctx, b.cfg.Links.Link(t.Machine), ops.BoxScreen, ops.ScreenReq{Box: ref(t), Lines: lines})
+	return r.Text, wrap("screen", err)
+}
+
 // Inspect reports the settled box of t.Gen.
 func (b *Boxes) Inspect(ctx context.Context, t ports.Target) (ports.BoxState, error) {
 	r, err := link.Call(ctx, b.cfg.Links.Link(t.Machine), ops.BoxInspect, ref(t))

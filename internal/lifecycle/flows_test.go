@@ -393,3 +393,30 @@ func TestFollowEndsWhenItsContextDoes(t *testing.T) {
 		t.Fatalf("%d rows before the end", n)
 	}
 }
+
+func TestScreenReadsTheCurrentRunUntilRelease(t *testing.T) {
+	g := newRig(t, newStore())
+	queued, err := g.r.Create(g.ctx, owner, domain.KindInteractive, domain.Spec{Repo: "o/r", Prompt: "p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, err := g.r.Screen(g.ctx, queued.ID, 5); err != nil || s != "" {
+		t.Fatalf("a queued task has no screen: %q %v", s, err)
+	}
+	id := g.started(domain.KindInteractive)
+	g.feed(id, domain.AgentReport{Run: 1, Status: domain.HCIdle})
+	g.settle()
+	if _, err := g.r.Do(g.ctx, id, domain.UserMessage{By: owner, Text: "on screen"}); err != nil {
+		t.Fatal(err)
+	}
+	g.settle()
+	if s, err := g.r.Screen(g.ctx, id, 5); err != nil || s != "on screen" {
+		t.Fatalf("the screen shows the run's terminal: %q %v", s, err)
+	}
+	if _, err := g.r.Screen(g.ctx, 999, 5); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an unknown task: %v", err)
+	}
+	if !g.r.Leading() {
+		t.Fatal("the rig leads")
+	}
+}

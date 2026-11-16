@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"sync/atomic"
 	"testing"
@@ -40,6 +41,9 @@ func (a *agent) registry() *link.Registry {
 	})
 	link.Handle(r, ops.BoxInspect, func(context.Context, link.Meta, ops.BoxRef) (ops.InspectResp, error) {
 		return ops.InspectResp{OOMKilled: true}, nil
+	})
+	link.Handle(r, ops.BoxScreen, func(_ context.Context, _ link.Meta, q ops.ScreenReq) (ops.ScreenResp, error) {
+		return ops.ScreenResp{Text: fmt.Sprintf("lines=%d", q.Lines)}, nil
 	})
 	link.Handle(r, ops.BoxSave, func(_ context.Context, _ link.Meta, q ops.SaveReq) (ops.SaveResp, error) {
 		return ops.SaveResp{Handle: "tpl"}, nil
@@ -142,6 +146,9 @@ func checkReads(t *testing.T, b *remote.Boxes, tg ports.Target) {
 	}
 	if s, err := b.Inspect(c, tg); err != nil || !s.OOMKilled {
 		t.Fatalf("%+v %v", s, err)
+	}
+	if s, err := b.Screen(c, tg, 40); err != nil || s != "lines=40" {
+		t.Fatalf("%q %v", s, err)
 	}
 	if tpl, err := b.SaveTemplate(c, tg); err != nil || tpl != (ports.Template{Handle: "tpl", Machine: tg.Machine}) {
 		t.Fatalf("%+v %v", tpl, err)

@@ -291,6 +291,19 @@ func (c *Conn) Interrupt(ctx context.Context, terminal string) error {
 	return c.Call(ctx, "terminal.interrupt", map[string]any{"terminal": terminal, "timeout": 1}, nil)
 }
 
+// ReadResult is terminal.read's answer: the screen and the history asked for, as text. Complete
+// is false when part of it may be missing, as for a full-screen program read while it works.
+type ReadResult struct {
+	Text     string `json:"text"`
+	Complete bool   `json:"complete"`
+}
+
+// Read returns a terminal's screen plus lines of history above it, live or finished.
+func (c *Conn) Read(ctx context.Context, terminal string, lines int) (ReadResult, error) {
+	var out ReadResult
+	return out, c.Call(ctx, "terminal.read", map[string]any{"terminal": terminal, "lines": lines}, &out)
+}
+
 // Exec runs a program to its end and returns what it wrote.
 func (c *Conn) Exec(ctx context.Context, r ExecReq) (ExecResult, error) {
 	var out ExecResult

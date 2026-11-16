@@ -42,6 +42,9 @@ func stubBoxOps(r *link.Registry) {
 	link.Handle(r, ops.BoxInspect, func(context.Context, link.Meta, ops.BoxRef) (ops.InspectResp, error) {
 		return ops.InspectResp{}, refuse
 	})
+	link.Handle(r, ops.BoxScreen, func(context.Context, link.Meta, ops.ScreenReq) (ops.ScreenResp, error) {
+		return ops.ScreenResp{}, refuse
+	})
 	link.Handle(r, ops.BoxSave, func(context.Context, link.Meta, ops.SaveReq) (ops.SaveResp, error) { return ops.SaveResp{}, refuse })
 	file := func(context.Context, link.Meta, ops.BoxPath) (ops.FileResp, error) { return ops.FileResp{}, refuse }
 	link.Handle(r, ops.BoxRead, file)

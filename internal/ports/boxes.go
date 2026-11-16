@@ -98,6 +98,9 @@ type Boxes interface {
 	// and lifecycle waits for it to link again.
 	Observe(ctx context.Context, t Target) (domain.AgentObservation, error)
 
+	// Screen reads the agent terminal of t.Run as text: its screen plus lines of history above it.
+	// A missing box or terminal is "" with no error.
+	Screen(ctx context.Context, t Target, lines int) (string, error)
 	// Inspect reports the settled state of the box of t.Gen.
 	Inspect(ctx context.Context, t Target) (BoxState, error)
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/IniZio/outpost/internal/hc"
 )
@@ -178,6 +179,8 @@ func (c *Core) onTerminal(r request) (any, *rpcError) {
 	case "terminal.interrupt":
 		t.intrs++
 		return map[string]any{"effect": "none"}, nil
+	case "terminal.read":
+		return map[string]any{"text": strings.Join(t.sent, "\n"), "complete": true, "how": "screen"}, nil
 	}
 	return nil, &rpcError{Kind: "unknown_method", Message: r.Method}
 }

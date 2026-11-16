@@ -90,6 +90,8 @@ var scenario = []step{
 	{method: "terminal.kill", params: map[string]any{"terminal": "agent-r1"}},
 	{method: "terminal.interrupt", params: map[string]any{"terminal": "nosuch", "timeout": 1}},
 	{method: "machine.exec", params: map[string]any{"argv": []string{"sh", "-c", "echo out; exit 2"}, "timeout": 10}},
+	{method: "terminal.read", params: map[string]any{"terminal": "agent-r1", "lines": 0}},
+	{method: "terminal.read", params: map[string]any{"terminal": "nosuch", "lines": 0}},
 }
 
 type line struct {
