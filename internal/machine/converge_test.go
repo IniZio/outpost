@@ -170,3 +170,37 @@ func TestACutCallerRejoinsTheRunningJob(t *testing.T) {
 		t.Fatalf("nothing restarts: %v", r.sb.Calls())
 	}
 }
+
+func TestTheProxyCAIsTrustedBeforeAnyClone(t *testing.T) {
+	r := newRig(t, nil)
+	req := plan(ref(1, 1, 1), true)
+	req.CA = []byte("-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n")
+	if _, _, err := r.converge(req); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := r.sb.File(ports.BoxKey{Task: 1, Gen: 1}, "/run/outpost/proxy-ca.crt"); !ok || got != string(req.CA) {
+		t.Fatalf("the CA is copied in: %q %v", got, ok)
+	}
+	calls := r.sb.Calls()
+	trust := slices.Index(calls, "exec /opt/outpost/bin/box-trust /run/outpost/proxy-ca.crt")
+	clone := slices.IndexFunc(calls, func(c string) bool { return strings.HasPrefix(c, "exec gh repo clone") })
+	if trust < 0 || clone < trust {
+		t.Fatalf("box-trust runs before the first clone: %v", calls)
+	}
+}
+
+func TestNoCANoTrustAndAFailedTrustFailsTheConverge(t *testing.T) {
+	r := newRig(t, nil)
+	if _, _, err := r.converge(plan(ref(1, 1, 1), true)); err != nil || r.sb.Count("exec /opt/outpost/bin/box-trust") != 0 {
+		t.Fatalf("no CA, no trust step: %v %v", err, r.sb.Calls())
+	}
+	r.sb.Fail("/opt/outpost/bin/box-trust", "no bundle")
+	req := plan(ref(2, 1, 1), true)
+	req.CA = []byte("ca")
+	if _, _, err := r.converge(req); err == nil || !strings.Contains(err.Error(), "no bundle") {
+		t.Fatalf("a failed trust fails the converge: %v", err)
+	}
+	if r.sb.Count("exec gh repo clone o/main /workspace/main.partial") != 1 {
+		t.Fatalf("nothing is cloned without trust: %v", r.sb.Calls())
+	}
+}

@@ -103,11 +103,16 @@ func (w *world) name(tg ports.Target) string {
 	return fmt.Sprintf("obit-%s-t%d-g%d", w.id, tg.Task, tg.Gen)
 }
 
-func (w *world) chain(t *testing.T) portstest.BoxesRig {
+// chain joins the adapters. With needCA the clone refuses to run unless the bundle trusts testCA.
+func (w *world) chain(t *testing.T, needCA bool) portstest.BoxesRig {
+	clone := "git clone -q /srv/main.git \"$0\""
+	if needCA {
+		clone = trusted + " && " + clone
+	}
 	c := newChain(t, w.sb, func(cfg *machine.Config) {
 		cfg.Clone = func(_ domain.RepoName, dir string) []string {
 			w.clones.Add(1)
-			return []string{"git", "clone", "-q", "/srv/main.git", dir}
+			return []string{"sh", "-c", clone, dir}
 		}
 	})
 	rp := c.rp
@@ -124,13 +129,13 @@ func (w *world) chain(t *testing.T) portstest.BoxesRig {
 func TestDockerMeetsTheBoxesContract(t *testing.T) {
 	w := newWorld(t)
 	t.Run("contract", func(t *testing.T) {
-		portstest.BoxesContract(t, func(t *testing.T) portstest.BoxesRig { return w.chain(t) })
+		portstest.BoxesContract(t, func(t *testing.T) portstest.BoxesRig { return w.chain(t, false) })
 	})
 }
 
 func TestDockerBoxLifecycle(t *testing.T) {
 	w := newWorld(t)
-	rp := w.chain(t)
+	rp := w.chain(t, true)
 	tg := ports.Target{Task: 1, Machine: rp.Machine, Run: 1, Gen: 1}
 	signals := watch(t, rp)
 	startFresh(t, w, rp, tg)
@@ -191,10 +196,16 @@ func expect(t *testing.T, signals <-chan domain.Signal, want domain.Signal) {
 	}
 }
 
+// testCA stands in for the proxy's CA. A clone that checks for it proves the trust step comes first.
+const (
+	testCA  = "-----BEGIN CERTIFICATE-----\nOUTPOSTITCA\n-----END CERTIFICATE-----\n"
+	trusted = "grep -qxF OUTPOSTITCA /etc/ssl/certs/ca-certificates.crt"
+)
+
 func plan(rp portstest.BoxesRig, tg ports.Target, fresh bool) ports.Plan {
 	return ports.Plan{
 		Target: tg, Image: rp.Image, Fresh: fresh, Repos: []domain.RepoName{"o/main"},
-		Env: map[string]string{"GH_TOKEN": "placeholder"}, Launch: ports.Launch{
+		Env: map[string]string{"GH_TOKEN": "placeholder"}, CA: []byte(testCA), Launch: ports.Launch{
 			Argv: []string{"agent"}, Home: []ports.File{{Path: ".config/agent/settings.json", Data: []byte("{}")}},
 		},
 	}
@@ -261,6 +272,9 @@ func sleepAndWake(t *testing.T, w *world, rp portstest.BoxesRig, signals <-chan 
 	expect(t, signals, domain.AgentReport{Run: 2, Status: domain.HCIdle})
 	if w.clones.Load() != 1 {
 		t.Fatal("a wake keeps the workspace")
+	}
+	if n := run(t, "exec", w.name(tg), "grep", "-cxF", "OUTPOSTITCA", "/etc/ssl/certs/ca-certificates.crt"); n != "1" {
+		t.Fatalf("a wake trusts the CA once, found %s copies", n)
 	}
 	if o, err := rp.Boxes.Observe(ctx(t), tg); err != nil || !o.Present || o.Finished {
 		t.Fatalf("observe: %+v %v", o, err)

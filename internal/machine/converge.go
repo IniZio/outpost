@@ -50,6 +50,7 @@ var steps = []step{
 	{"", (*convergeRun).connect},
 	{"", (*convergeRun).seed},
 	{"", (*convergeRun).seedHome},
+	{"", (*convergeRun).trust},
 	{"", (*convergeRun).clone},
 	{"Starting the agent", (*convergeRun).agent},
 }
@@ -172,6 +173,29 @@ func writeHome(w *tar.Writer, dirs map[string]bool, f ops.HomeFile) error {
 	}
 	_, err := w.Write(f.Data)
 	return err //nolint:wrapcheck // homeTar wraps
+}
+
+// trust installs the credential proxy's CA before any clone, because clones go through the proxy.
+// It runs on every converge: a replaced box is a new container over the old volumes.
+func (c *convergeRun) trust(ctx context.Context) error {
+	if len(c.req.CA) == 0 {
+		return nil
+	}
+	var buf bytes.Buffer
+	w := tar.NewWriter(&buf)
+	if err := w.WriteHeader(&tar.Header{Name: caName, Mode: 0o644, Size: int64(len(c.req.CA))}); err != nil {
+		return fmt.Errorf("machine: ca tar: %w", err)
+	}
+	if _, err := w.Write(c.req.CA); err != nil {
+		return fmt.Errorf("machine: ca tar: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("machine: ca tar: %w", err)
+	}
+	if err := c.m.cfg.Sandbox.CopyIn(ctx, c.key, caDir, &buf); err != nil {
+		return fmt.Errorf("machine: proxy ca: %w", err)
+	}
+	return c.run(ctx, nil, boxTrust, path.Join(caDir, caName))
 }
 
 // clone clones each repo not yet in the workspace into <dir>.partial and then moves it in place,

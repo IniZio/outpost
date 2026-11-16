@@ -11,6 +11,7 @@ COPY --chmod=0755 box-init.sh /opt/outpost/bin/box-init
 COPY --chmod=0755 oom0.sh /opt/outpost/bin/oom0
 COPY --chmod=0755 box-seed.sh /opt/outpost/bin/box-seed
 COPY --chmod=0755 box-save.sh /opt/outpost/bin/box-save
+COPY --chmod=0755 box-trust.sh /opt/outpost/bin/box-trust
 COPY --chmod=0644 oom-reset.sh /opt/outpost/lib/oom-reset.sh
 
 FROM tools

@@ -24,6 +24,9 @@ const (
 	oomReset = "/opt/outpost/bin/oom0"
 	boxSeed  = "/opt/outpost/bin/box-seed"
 	boxSave  = "/opt/outpost/bin/box-save"
+	boxTrust = "/opt/outpost/bin/box-trust"
+	caDir    = "/run/outpost"
+	caName   = "proxy-ca.crt"
 	seedDir  = "/var/lib/outpost-seed"
 	homeMark = "/root/.outpost-seeded"
 )
