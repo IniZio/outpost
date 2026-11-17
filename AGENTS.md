@@ -11,6 +11,7 @@ make ci             # lint, audit, test, build
 ```
 
 - `make lint` checks formatting (gofumpt, goimports), runs golangci-lint, and runs typos.
+- `make web` builds the web UI (`web/`, React and Vite, Node pinned in `mise.toml`) into `internal/api/web/app`, which is not committed. `go build` embeds it when present, and otherwise the server serves the plain watch page. For a local trial set `OUTPOST_DEV_BROWSER_CONTROL=true` so a `outpost-cli weblink` session can act; it is off by default.
 - `make audit` runs govulncheck and fails on an untidy `go.mod`.
 - `make proxy-image` builds the credential proxy in `images/proxy` (mitmproxy and an addon). Its Python tests run during the build.
 - `make test` runs `go test -race -cover`. The Postgres tests skip unless `OUTPOST_TEST_DATABASE_URL` is set. `make test-pg` starts a throwaway `postgres:17` container on a free port and runs the tests of `internal/store/...` and `cmd/...` against it, and CI does the same with a service container. Each test makes its own database.

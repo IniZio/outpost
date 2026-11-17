@@ -7,10 +7,15 @@ TYPOS ?= typos
 
 PG_IMAGE := postgres:17
 
-.PHONY: help setup lint audit chart test test-pg ci build hc-golden it it-sweep tools-image box-image proxy-image
+.PHONY: help web setup lint audit chart test test-pg ci build hc-golden it it-sweep tools-image box-image proxy-image
 
 help:
-	@echo "targets: setup lint audit chart test test-pg ci build hc-golden it tools-image box-image proxy-image"
+	@echo "targets: web setup lint audit chart test test-pg ci build hc-golden it tools-image box-image proxy-image"
+
+# web builds the single-page UI into internal/api/web/app, which `go build` embeds. Without it the
+# server serves the plain watch page. It needs the pinned Node (mise install).
+web:
+	cd web && npm ci && npm run build
 
 setup:
 	@go version | grep -q 'go$(GO_VERSION) ' || { echo "setup: need Go $(GO_VERSION) (mise install)"; exit 1; }
