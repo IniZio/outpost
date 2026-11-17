@@ -27,6 +27,8 @@ const usage = `usage: outpost-cli <command>
   weblink                    print a one-time link that signs a browser in to watch
   schedule ls|put|import|fire|enable|disable
                              manage your schedules (outpost-cli schedule for details)
+  repo setup put|ls|log|build
+                             manage a repo's setup revisions (outpost-cli repo for details)
 
 Settings: OUTPOST_SERVER and OUTPOST_TOKEN override the saved login in ~/.config/outpost/cli.json.`
 
@@ -60,6 +62,7 @@ var commands = map[string]command{
 	"machines": machines,
 	"weblink":  webLink,
 	"schedule": schedules,
+	"repo":     repoCmd,
 }
 
 func run(ctx context.Context, args []string, e env) error {

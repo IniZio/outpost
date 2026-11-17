@@ -297,6 +297,25 @@ func (c *Client) SetRepo(ctx context.Context, r Repo) (Repo, error) {
 	return out, c.do(ctx, http.MethodPut, "/api/repos/"+r.Name, r, &out)
 }
 
+// PutSetup stores files as the repo's next setup revision.
+func (c *Client) PutSetup(ctx context.Context, repo string, files map[string]string) (SetupRev, error) {
+	var out SetupRev
+	return out, c.do(ctx, http.MethodPost, "/api/repos/"+repo+"/setups", SetupFiles{Files: files}, &out)
+}
+
+// Setups lists the repo's setup revisions, newest first.
+func (c *Client) Setups(ctx context.Context, repo string) ([]SetupRev, error) {
+	var out []SetupRev
+	return out, c.do(ctx, http.MethodGet, "/api/repos/"+repo+"/setups", nil, &out)
+}
+
+// BuildSetup starts a build of the revision on machine, or on any of the caller's when empty.
+func (c *Client) BuildSetup(ctx context.Context, repo string, rev int, machine string) (SetupRev, error) {
+	var out SetupRev
+	path := fmt.Sprintf("/api/repos/%s/setups/%d/build", repo, rev)
+	return out, c.do(ctx, http.MethodPost, path, SetupBuild{Machine: machine}, &out)
+}
+
 // SetSecret stores one of the caller's secrets. The value is never read back.
 func (c *Client) SetSecret(ctx context.Context, name, value string) error {
 	return c.do(ctx, http.MethodPut, "/api/secrets/"+url.PathEscape(name), Text{Text: value}, nil)

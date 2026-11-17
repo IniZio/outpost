@@ -10,7 +10,10 @@ import (
 )
 
 func repoView(r domain.Repo) client.Repo {
-	v := client.Repo{Name: string(r.Name), ReadyImage: r.ReadyImage, ReadyOn: string(r.ReadyOn), Notes: r.Notes}
+	v := client.Repo{
+		Name: string(r.Name), ReadyImage: r.ReadyImage, ReadyOn: string(r.ReadyOn), Notes: r.Notes,
+		SetupRev: r.Setup.Rev, SetupImage: r.Setup.Image, SetupOn: string(r.Setup.Machine),
+	}
 	if !r.ReadyAt.IsZero() {
 		at := r.ReadyAt
 		v.ReadyAt = &at

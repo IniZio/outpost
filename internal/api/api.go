@@ -58,7 +58,9 @@ type Config struct {
 	Secrets Secrets
 	// Schedules is nil when this server runs no schedules, and their routes answer 501.
 	Schedules *schedule.Service
-	Clock     domain.Clock
+	// Setups is nil when this server builds no setups, and their routes answer 501.
+	Setups *lifecycle.Setups
+	Clock  domain.Clock
 	// Web is the root of the web files: watch.html, watch.js and watch.css, and optionally app/
 	// with the built UI. Nil serves the embedded files.
 	Web fs.FS
@@ -101,6 +103,7 @@ func (s *Server) routes() {
 	m.HandleFunc("PUT /api/repos/{owner}/{name}", s.act(s.setRepo))
 	m.HandleFunc("PUT /api/secrets/{name}", s.act(s.setSecret))
 	s.scheduleRoutes()
+	s.setupRoutes()
 	s.webRoutes()
 }
 
@@ -178,6 +181,10 @@ var problems = []problem{
 	{domain.ErrTooManyPairings, http.StatusTooManyRequests, "rate_limited"},
 	{errNoSecrets, http.StatusNotImplemented, "not_built"},
 	{errNoSchedules, http.StatusNotImplemented, "not_built"},
+	{errNoSetups, http.StatusNotImplemented, "not_built"},
+	{lifecycle.ErrNoSetup, http.StatusNotFound, "not_found"},
+	{lifecycle.ErrBuilding, http.StatusConflict, "building"},
+	{lifecycle.ErrNoBuilder, http.StatusConflict, "no_machine"},
 	{lifecycle.ErrNotLeading, http.StatusServiceUnavailable, "not_leading"},
 }
 

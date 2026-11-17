@@ -110,6 +110,37 @@ type Repo struct {
 	ReadyOn    string     `json:"ready_on"`
 	ReadyAt    *time.Time `json:"ready_at,omitempty"`
 	Notes      string     `json:"notes"`
+	SetupRev   int        `json:"setup_rev,omitempty"`
+	SetupImage string     `json:"setup_image,omitempty"`
+	SetupOn    string     `json:"setup_on,omitempty"`
+}
+
+// SetupFiles are the files of a new setup revision, by name.
+type SetupFiles struct {
+	Files map[string]string `json:"files"`
+}
+
+// SetupRev is a setup revision and its latest build. Files lists the names; Log is the build
+// output's tail.
+type SetupRev struct {
+	Repo      string     `json:"repo"`
+	Rev       int        `json:"rev"`
+	Status    string     `json:"status"`
+	Files     []string   `json:"files"`
+	Machine   string     `json:"machine,omitempty"`
+	Image     string     `json:"image,omitempty"`
+	Digest    string     `json:"digest,omitempty"`
+	Inner     string     `json:"inner,omitempty"`
+	Commit    string     `json:"commit,omitempty"`
+	Log       string     `json:"log,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	CreatedBy string     `json:"created_by"`
+	BuiltAt   *time.Time `json:"built_at,omitempty"`
+}
+
+// SetupBuild asks for a build, on the named machine or any of the caller's.
+type SetupBuild struct {
+	Machine string `json:"machine,omitempty"`
 }
 
 // SignIn trades a GitHub token for an API token.
