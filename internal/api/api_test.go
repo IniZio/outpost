@@ -115,6 +115,18 @@ func TestOthersSeeNothingAndWatchersCannotAct(t *testing.T) {
 	}
 }
 
+func TestAPersonStartsSetupButNotScheduledTasks(t *testing.T) {
+	g := newRig(t)
+	c := ctx(t)
+	if _, err := g.owner.CreateTask(c, client.NewTask{Repo: "o/r", Prompt: "p", Kind: "scheduled"}); code(err) != "bad_request" {
+		t.Fatalf("a person starts a scheduled task: %v", err)
+	}
+	setup, err := g.owner.CreateTask(c, client.NewTask{Repo: "o/r", Prompt: "p", Kind: "setup"})
+	if err != nil || setup.Kind != "setup" {
+		t.Fatalf("setup task: %+v %v", setup, err)
+	}
+}
+
 func TestAWebLinkSignsABrowserInToWatchOnly(t *testing.T) {
 	g := newRig(t)
 	c := ctx(t)

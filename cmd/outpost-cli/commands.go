@@ -105,8 +105,9 @@ func runTask(ctx context.Context, e env, args []string) error {
 	also := fs.String("also", "", "more repos, comma separated")
 	title := fs.String("title", "", "a title")
 	detach := fs.Bool("d", false, "print the id and return")
+	setup := fs.Bool("setup", false, "prepare the repo's ready template")
 	if err := fs.Parse(args); err != nil || fs.NArg() < 2 {
-		return errors.New("usage: outpost-cli run [-also a/b,c/d] [-title T] [-d] REPO PROMPT")
+		return errors.New("usage: outpost-cli run [-also a/b,c/d] [-title T] [-d] [-setup] REPO PROMPT")
 	}
 	c, err := connect(e)
 	if err != nil {
@@ -115,6 +116,9 @@ func runTask(ctx context.Context, e env, args []string) error {
 	n := client.NewTask{Repo: fs.Arg(0), Prompt: strings.Join(fs.Args()[1:], " "), Title: *title}
 	if *also != "" {
 		n.Also = strings.Split(*also, ",")
+	}
+	if *setup {
+		n.Kind = "setup"
 	}
 	t, err := c.CreateTask(ctx, n)
 	if err != nil {

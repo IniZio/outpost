@@ -37,6 +37,8 @@ type NewTask struct {
 	Prompt     string   `json:"prompt"`
 	Title      string   `json:"title,omitempty"`
 	TimeoutMin int      `json:"timeout_min,omitempty"`
+	// Kind is "interactive" (the default) or "setup", which prepares the repo's ready template.
+	Kind string `json:"kind,omitempty"`
 }
 
 // Entry is one timeline entry. Seq counts from 1 and is the SSE event id.

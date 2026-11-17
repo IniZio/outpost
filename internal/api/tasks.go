@@ -33,6 +33,9 @@ func (s *Server) taskRoutes() {
 	}
 }
 
+// createKinds are the kinds a person may start. Scheduled tasks come only from schedules.
+var createKinds = map[string]domain.Kind{"": domain.KindInteractive, "interactive": domain.KindInteractive, "setup": domain.KindSetup}
+
 var kindNames = map[domain.Kind]string{domain.KindInteractive: "interactive", domain.KindScheduled: "scheduled", domain.KindSetup: "setup"}
 
 func view(t domain.Task, a domain.Access) client.Task {
@@ -88,7 +91,11 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request, p auth.Princ
 	for _, a := range in.Also {
 		spec.Also = append(spec.Also, domain.RepoName(a))
 	}
-	t, err := s.cfg.Tasks.Create(r.Context(), p.Login, domain.KindInteractive, spec)
+	kind, ok := createKinds[in.Kind]
+	if !ok {
+		return fmt.Errorf("%w: kind is interactive or setup", errBadRequest)
+	}
+	t, err := s.cfg.Tasks.Create(r.Context(), p.Login, kind, spec)
 	if err != nil {
 		return err //nolint:wrapcheck // lifecycle wraps its own
 	}
