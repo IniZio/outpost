@@ -88,7 +88,7 @@ func (a *Agent) Launch(_ context.Context, f ports.LaunchFor) (ports.Launch, erro
 	if !f.Resume {
 		argv = append(argv, f.Prompt)
 	}
-	home, err := homeFiles(f.Repos)
+	home, err := homeFiles(f.Repos, a.cfg.Plugins)
 	if err != nil {
 		return ports.Launch{}, err
 	}
@@ -117,11 +117,13 @@ func (a *Agent) setup() [][]string {
 	return out
 }
 
-// homeFiles are the files seeded into a fresh home volume. .claude.json skips onboarding and the
-// bypass-permissions and trust dialogs. The settings file records the transcript path at every
+// homeFiles are the files written into the home at every start. .claude.json skips onboarding and
+// the bypass-permissions and trust dialogs. The settings file records the transcript path at every
 // session start, because the transcript's directory is named after the working directory, which
-// LastMessage does not know.
-func homeFiles(repos []domain.RepoName) ([]ports.File, error) {
+// LastMessage does not know. It also enables the plugins: writing it drops what `claude plugin
+// install` recorded, and on a home from a template the install finds the plugin there and enables
+// nothing.
+func homeFiles(repos []domain.RepoName, plugins []string) ([]ports.File, error) {
 	trusted := func() map[string]any {
 		return map[string]any{"hasTrustDialogAccepted": true, "hasCompletedProjectOnboarding": true}
 	}
@@ -134,7 +136,12 @@ func homeFiles(repos []domain.RepoName) ([]ports.File, error) {
 		"bypassPermissionsModeAccepted": true,
 		"projects":                      projects,
 	}
+	enabled := make(map[string]bool, len(plugins))
+	for _, p := range plugins {
+		enabled[p] = true
+	}
 	settings := map[string]any{
+		"enabledPlugins":                    enabled,
 		"skipDangerousModePermissionPrompt": true,
 		"hooks": map[string]any{
 			"SessionStart": []any{map[string]any{"hooks": []any{map[string]any{

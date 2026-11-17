@@ -108,7 +108,7 @@ func TestLaunchTrustsRepoDirs(t *testing.T) {
 }
 
 func TestLaunchHomeFiles(t *testing.T) {
-	l, err := New(Config{}).Launch(context.Background(), ports.LaunchFor{Target: ports.Target{Task: 1}, Prompt: "x"})
+	l, err := New(Config{Plugins: []string{"p@m"}}).Launch(context.Background(), ports.LaunchFor{Target: ports.Target{Task: 1}, Prompt: "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,23 +126,32 @@ func TestLaunchHomeFiles(t *testing.T) {
 	if !state.Onboarded || !state.Bypass || !state.Projects[WorkspaceDir].Trusted {
 		t.Errorf(".json: %+v", state)
 	}
+	checkSettings(t, l.Home[1].Data)
+	for _, f := range l.Home {
+		if f.Mode != 0o600 {
+			t.Errorf("%s mode %o", f.Path, f.Mode)
+		}
+	}
+}
+
+func checkSettings(t *testing.T, data []byte) {
+	t.Helper()
 	var settings struct {
-		Skip  bool `json:"skipDangerousModePermissionPrompt"`
-		Hooks struct {
+		Skip    bool            `json:"skipDangerousModePermissionPrompt"`
+		Enabled map[string]bool `json:"enabledPlugins"`
+		Hooks   struct {
 			SessionStart []struct {
 				Hooks []struct{ Type, Command string } `json:"hooks"`
 			}
 		} `json:"hooks"`
 	}
-	mustJSON(t, l.Home[1].Data, &settings)
+	mustJSON(t, data, &settings)
 	hs := settings.Hooks.SessionStart
+	if !settings.Enabled["p@m"] {
+		t.Errorf("a home from a template keeps its plugins enabled: %+v", settings.Enabled)
+	}
 	if !settings.Skip || len(hs) != 1 || len(hs[0].Hooks) != 1 || hs[0].Hooks[0].Type != "command" {
 		t.Fatalf("settings: %+v", settings)
-	}
-	for _, f := range l.Home {
-		if f.Mode != 0o600 {
-			t.Errorf("%s mode %o", f.Path, f.Mode)
-		}
 	}
 }
 
