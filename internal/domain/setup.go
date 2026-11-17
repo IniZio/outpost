@@ -79,7 +79,9 @@ func (r SetupRev) Build() SetupBuild {
 var setupFileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 // reservedSetupNames are what the build makes next to the files.
-var reservedSetupNames = map[string]bool{"outpost.hcl": true, "src": true, "out": true, "ctx": true}
+var reservedSetupNames = map[string]bool{
+	"outpost.json": true, "outpost.Dockerfile": true, "outpost.hcl": true, "src": true, "out": true, "ctx": true,
+}
 
 // ValidSetupFiles checks a revision's files: flat names, the bake file present, and the limits.
 func ValidSetupFiles(files map[string]string) error {

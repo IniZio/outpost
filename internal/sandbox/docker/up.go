@@ -37,10 +37,10 @@ func (d *Docker) Up(ctx context.Context, spec ports.BoxSpec, report ports.Progre
 	return d.Inspect(ctx, spec.Key)
 }
 
-// IsTemplate reports whether image is a template this provider saved, which lives only on the
-// machine that saved it and is never pulled.
+// IsTemplate reports whether image is a template this provider saved or a setup build it made,
+// which lives only on the machine that made it and is never pulled.
 func (d *Docker) IsTemplate(image string) bool {
-	return strings.HasPrefix(image, d.cfg.Prefix+"-ready/")
+	return strings.HasPrefix(image, d.cfg.Prefix+"-ready/") || strings.HasPrefix(image, d.cfg.Prefix+"-setup/")
 }
 
 func (d *Docker) ensureImage(ctx context.Context, image string, report ports.Progress) error {
@@ -87,7 +87,12 @@ func (d *Docker) ensureBox(ctx context.Context, spec ports.BoxSpec, mtu int) err
 		return err
 	}
 	if this == nil {
-		if _, err := d.docker(ctx, d.createArgs(spec, mtu)...); err != nil {
+		mounts, err := d.setupMounts(spec)
+		if err != nil {
+			return err
+		}
+		args := append(append(d.createArgs(spec, mtu), mounts...), spec.Image)
+		if _, err := d.docker(ctx, args...); err != nil {
 			return err
 		}
 	} else if this.Running {
@@ -145,7 +150,7 @@ func (d *Docker) createArgs(s ports.BoxSpec, mtu int) []string {
 	for _, dev := range d.cfg.Devices {
 		a = append(a, "--device", dev)
 	}
-	return append(a, s.Image)
+	return a
 }
 
 // awaitReady waits for box-init's ready marker, and fails fast with the box's last log lines if

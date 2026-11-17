@@ -35,6 +35,16 @@ type Config struct {
 	Run     Runner
 	Clock   domain.Clock
 	Poll    time.Duration
+
+	// Setup builds. Data is the machine's dir for repo mirrors, inner image tars and build work
+	// dirs; empty turns setup builds and mirror mounts off. Builder is the BuildKit builder's
+	// name, CacheMax the most its cache keeps after a build (as buildx takes it, such as 20gb).
+	Data     string
+	Builder  string
+	CacheMax string
+	GitURL   func(domain.RepoName) string
+	GitAuth  []string // git -c flags that authenticate mirror fetches
+	Host     Host
 }
 
 // Defaults fills the zero parts of c.
@@ -59,6 +69,25 @@ func (c Config) Defaults() Config {
 	}
 	if c.Poll == 0 {
 		c.Poll = 200 * time.Millisecond
+	}
+	return c.setupDefaults()
+}
+
+func (c Config) setupDefaults() Config {
+	if c.Builder == "" {
+		c.Builder = c.Prefix + "-setup"
+	}
+	if c.CacheMax == "" {
+		c.CacheMax = "20gb"
+	}
+	if c.GitURL == nil {
+		c.GitURL = GitHubURL
+	}
+	if c.GitAuth == nil {
+		c.GitAuth = GHAuth
+	}
+	if c.Host == nil {
+		c.Host = OSHost{}
 	}
 	return c
 }

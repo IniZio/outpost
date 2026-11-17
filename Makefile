@@ -60,7 +60,7 @@ it:
 	port=$$(docker port $$c 5432/tcp | head -n1 | sed 's/.*://'); \
 	timeout 60 sh -c "until docker exec $$c pg_isready -U postgres -h 127.0.0.1 >/dev/null 2>&1; do sleep 0.5; done"; \
 	OUTPOST_IT_ID=$$id OUTPOST_TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:$$port/postgres \
-		go test -tags docker -count=1 -timeout 15m -run Docker -v ./internal/boxchain/ ./cmd/outpost/
+		go test -tags docker -count=1 -timeout 15m -run Docker -v ./internal/boxchain/ ./internal/sandbox/docker/ ./cmd/outpost/
 
 it-sweep:
 	@test -n "$(ID)"
