@@ -38,11 +38,16 @@ type Repo struct {
 	ReadyAt    time.Time
 	Notes      string
 	SetupTask  TaskID
+	// Setup is the current ready setup revision's build, which new tasks prefer over ReadyImage.
+	Setup SetupBuild
 }
 
-// ReadyFor picks the image a task starts from on machine m. A setup task always starts fresh, and
-// a template is used only on the machine that holds it.
+// ReadyFor picks the image a task starts from on machine m: the setup revision's build there, else
+// the saved template there, else base. A setup task always starts fresh.
 func (r Repo) ReadyFor(k Kind, base string, m MachineID) string {
+	if b, ok := r.SetupOn(k, m); ok {
+		return b.Image
+	}
 	if k == KindSetup || r.ReadyImage == "" || r.ReadyOn != m {
 		return base
 	}

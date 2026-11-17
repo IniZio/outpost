@@ -206,6 +206,11 @@ func TestMachineHostsOnlyItsOwnersSandboxTasks(t *testing.T) {
 	}
 }
 
+func withBuild(r domain.Repo, m domain.MachineID) domain.Repo {
+	r.Setup = domain.SetupBuild{Rev: 2, Image: "setup:r2", Inner: "abc", Machine: m}
+	return r
+}
+
 func TestRepoReadyFor(t *testing.T) {
 	ready := domain.Repo{Name: "acme/app", ReadyImage: "ready:1", ReadyOn: "m1"}
 	tests := []struct {
@@ -220,6 +225,9 @@ func TestRepoReadyFor(t *testing.T) {
 		{"another machine has no copy", ready, domain.KindInteractive, "m2", "base"},
 		{"no template yet", domain.Repo{Name: "acme/app"}, domain.KindInteractive, "m1", "base"},
 		{"a template of no known machine", domain.Repo{ReadyImage: "ready:1"}, domain.KindInteractive, "m1", "base"},
+		{"a setup build wins over the template", withBuild(ready, "m1"), domain.KindInteractive, "m1", "setup:r2"},
+		{"a setup build elsewhere falls back to the template", withBuild(ready, "m2"), domain.KindInteractive, "m1", "ready:1"},
+		{"a setup task ignores the setup build", withBuild(ready, "m1"), domain.KindSetup, "m1", "base"},
 	}
 	for _, tc := range tests {
 		if got := tc.repo.ReadyFor(tc.kind, "base", tc.machine); got != tc.want {

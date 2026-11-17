@@ -29,7 +29,12 @@ func LaunchPrompt(t Task, r Repo) string {
 	if m := slashCommand.FindStringSubmatch(task); m != nil && t.Kind != KindSetup {
 		command, task = m[1], strings.TrimSpace(m[2])
 	}
-	lines := append(boxLines(t.Spec, r), kindLines(t, task)...)
+	lines := boxLines(t.Spec, r)
+	if b, ok := r.SetupOn(t.Kind, t.Machine); ok && b.Inner != "" {
+		lines = append(lines, "The repo's own Docker images are still loading into Docker in the background; `test -e "+
+			ImagesReadyPath+"` says when they are all in. Wait for it before you start containers from them.")
+	}
+	lines = append(lines, kindLines(t, task)...)
 	if command != "" {
 		return command + "\n\n" + strings.Join(lines, "\n")
 	}
