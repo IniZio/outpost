@@ -20,7 +20,9 @@ type BoxKey struct {
 type BoxSpec struct {
 	Key   BoxKey
 	Image string
-	Repo  domain.RepoName // kept on the box, so a saved template can be named for it
+	Repo  domain.RepoName   // kept on the box, so a saved template can be named for it
+	Repos []domain.RepoName // every repo of the task, whose machine mirrors the box may read
+	Inner string            // the setup build's inner images key, mounted read-only; "" for none
 	Fresh bool
 	Env   map[string]string
 }

@@ -105,20 +105,35 @@ func (s *Store) Seen(ctx context.Context, id domain.MachineID) (bool, time.Time,
 	return online, *at, nil
 }
 
-// Repo returns the repo row, or the zero Repo with only Name set when none exists.
-func (s *Store) Repo(ctx context.Context, name domain.RepoName) (domain.Repo, error) {
-	r := domain.Repo{Name: name}
-	var at *time.Time
-	err := s.pool.QueryRow(ctx, `SELECT ready_image, ready_on, ready_at, notes, setup_task
-		FROM repos WHERE name = $1`, string(name)).Scan(&r.ReadyImage, &r.ReadyOn, &at, &r.Notes, &r.SetupTask)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return r, nil
-	}
+// repoCols reads a repo row with its current setup build, from repos r joined to repo_setups s.
+const repoCols = `r.name, r.ready_image, r.ready_on, r.ready_at, r.notes, r.setup_task,
+	COALESCE(s.rev, 0), COALESCE(s.image, ''), COALESCE(s.inner_key, ''), COALESCE(s.machine, '')
+	FROM repos r LEFT JOIN repo_setups s ON s.repo = r.name AND s.rev = r.setup_rev`
+
+func scanRepo(row pgx.Row) (domain.Repo, error) {
+	var (
+		r  domain.Repo
+		at *time.Time
+	)
+	err := row.Scan(&r.Name, &r.ReadyImage, &r.ReadyOn, &at, &r.Notes, &r.SetupTask,
+		&r.Setup.Rev, &r.Setup.Image, &r.Setup.Inner, &r.Setup.Machine)
 	if err != nil {
-		return domain.Repo{}, fmt.Errorf("postgres: repo: %w", err)
+		return domain.Repo{}, err //nolint:wrapcheck // pgx.ErrNoRows is matched by the caller
 	}
 	if at != nil {
 		r.ReadyAt = *at
+	}
+	return r, nil
+}
+
+// Repo returns the repo row, or the zero Repo with only Name set when none exists.
+func (s *Store) Repo(ctx context.Context, name domain.RepoName) (domain.Repo, error) {
+	r, err := scanRepo(s.pool.QueryRow(ctx, `SELECT `+repoCols+` WHERE r.name = $1`, string(name)))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Repo{Name: name}, nil
+	}
+	if err != nil {
+		return domain.Repo{}, fmt.Errorf("postgres: repo: %w", err)
 	}
 	return r, nil
 }
@@ -138,22 +153,16 @@ func (s *Store) SetRepo(ctx context.Context, r domain.Repo) error {
 
 // Repos lists every repo row, by name.
 func (s *Store) Repos(ctx context.Context) ([]domain.Repo, error) {
-	rows, err := s.pool.Query(ctx, `SELECT name, ready_image, ready_on, ready_at, notes, setup_task FROM repos ORDER BY name`)
+	rows, err := s.pool.Query(ctx, `SELECT `+repoCols+` ORDER BY r.name`)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: repos: %w", err)
 	}
 	defer rows.Close()
 	var out []domain.Repo
 	for rows.Next() {
-		var (
-			r  domain.Repo
-			at *time.Time
-		)
-		if err := rows.Scan(&r.Name, &r.ReadyImage, &r.ReadyOn, &at, &r.Notes, &r.SetupTask); err != nil {
+		r, err := scanRepo(rows)
+		if err != nil {
 			return nil, fmt.Errorf("postgres: scan repo: %w", err)
-		}
-		if at != nil {
-			r.ReadyAt = *at
 		}
 		out = append(out, r)
 	}

@@ -28,6 +28,7 @@ type Store struct {
 	scheds    []ports.ScheduleRow
 	slots     map[ports.FireRow]domain.TaskID
 	lastSched domain.ScheduleID
+	setups    map[domain.RepoName][]domain.SetupRev
 
 	conflicts int
 	commitErr faults
@@ -115,6 +116,10 @@ func (s *Store) Crash() *Store {
 	maps.Copy(n.tasks, s.tasks)
 	maps.Copy(n.done, s.done)
 	maps.Copy(n.repos, s.repos)
+	n.setups = map[domain.RepoName][]domain.SetupRev{}
+	for name, revs := range s.setups {
+		n.setups[name] = slices.Clone(revs)
+	}
 	maps.Copy(n.machines, s.machines)
 	for id, entries := range s.timeline {
 		n.timeline[id] = slices.Clone(entries)

@@ -22,6 +22,8 @@ type StoreRig struct {
 	SetRepo func(r domain.Repo)
 	// Schedules is the same store's schedules.
 	Schedules ports.Schedules
+	// Setups is the same store's setup revisions.
+	Setups ports.Setups
 }
 
 // StoreRigFor wraps the in-memory Store.
@@ -34,6 +36,7 @@ func StoreRigFor(s *Store) StoreRig {
 		},
 		SetRepo:   s.SetRepo,
 		Schedules: s,
+		Setups:    s,
 	}
 }
 
@@ -58,6 +61,7 @@ func StoreContract(t *testing.T, newRig func(t *testing.T) StoreRig) {
 		"Lease":            contractLease,
 		"LeaseCancelledIn": contractLeaseCancel,
 		"Schedules":        contractSchedules,
+		"Setups":           contractSetups,
 	}
 	for name, run := range cases {
 		t.Run(name, func(t *testing.T) {

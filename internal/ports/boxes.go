@@ -27,7 +27,8 @@ type Target struct {
 // already exist and are reused untouched, so a replaced box loses no work.
 type Plan struct {
 	Target Target
-	Image  string            // the base image, or the repo's ready template handle
+	Image  string            // the base image, the repo's setup build or its ready template handle
+	Inner  string            // the setup build's inner images key, "" for none
 	Fresh  bool              // create volumes, clone and seed home; else reuse them
 	Repos  []domain.RepoName // Spec.Repo first, then Spec.Also, each pushable
 	Env    map[string]string // credential placeholders; the proxy swaps in the real secrets

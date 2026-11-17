@@ -105,6 +105,7 @@ func TestPostgresMeetsTheStoreContract(t *testing.T) {
 		return portstest.StoreRig{
 			Store:     s,
 			Schedules: s,
+			Setups:    s,
 			AddMachine: func(m domain.Machine, online bool) domain.MachineID {
 				id := addMachine(t, s, m)
 				if online {
