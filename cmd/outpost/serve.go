@@ -37,6 +37,7 @@ type server struct {
 	hub      *link.Hub
 	runner   *lifecycle.Runner
 	sched    *schedule.Service
+	setups   *lifecycle.Setups
 	http     *http.Server
 	draining atomic.Bool
 	// base is every request's parent context. The drain cancels it, so event streams end and the
@@ -103,11 +104,12 @@ func (s *server) wire(ctx context.Context, key secrets.Key, clock domain.Clock) 
 		return err
 	}
 	maxRun := s.cfg.MaxRunning
+	agent := claude.New(claude.Config{
+		Model: s.cfg.ClaudeModel, Bin: s.cfg.ClaudeBin, Marketplaces: s.cfg.ClaudeMarketplaces, Plugins: s.cfg.ClaudePlugins,
+	})
 	s.runner, err = lifecycle.New(lifecycle.Config{
 		Store: s.store, Boxes: boxes, Clock: clock, Policy: domain.DefaultPolicy(), BaseImage: s.cfg.BaseImage,
-		Agent: claude.New(claude.Config{
-			Model: s.cfg.ClaudeModel, Bin: s.cfg.ClaudeBin, Marketplaces: s.cfg.ClaudeMarketplaces, Plugins: s.cfg.ClaudePlugins,
-		}),
+		Agent:    agent,
 		Secrets:  creds,
 		Capacity: func() domain.Capacity { return domain.Capacity{Max: maxRun} },
 		Log:      s.log,
@@ -118,6 +120,9 @@ func (s *server) wire(ctx context.Context, key secrets.Key, clock domain.Clock) 
 	poke := s.runner.Poke
 	tap.poke.Store(&poke)
 	s.sched = schedule.New(schedule.Config{Store: s.store, Fire: s.runner.Fire, Clock: clock, Log: s.log})
+	s.setups = lifecycle.NewSetups(lifecycle.SetupConfig{
+		Store: s.store, Setups: s.store, Builds: boxes, Clock: clock, Base: s.cfg.BaseImage, Profile: agent.Profile(), Log: s.log,
+	})
 	s.base, s.cancelBase = context.WithCancel(context.WithoutCancel(ctx))
 	s.http = &http.Server{
 		Handler: s.routes(v, grants, clock), ReadHeaderTimeout: 10 * time.Second,
@@ -172,7 +177,7 @@ func (s *server) routes(v *secrets.Vault, grants http.Handler, clock domain.Cloc
 	mux.Handle("/", api.New(api.Config{
 		Tasks: s.runner, Auth: a, Clock: clock, PublicURL: s.cfg.PublicURL, Log: s.log,
 		Machines: machines{s.store, s.hub}, Pairing: pairing{s.store, s.hub}, Repos: s.store, Secrets: vault{v},
-		Schedules: s.sched,
+		Schedules: s.sched, Setups: s.setups,
 	}))
 	mux.Handle("GET /machines/link", s.linkHandler())
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -228,6 +233,13 @@ func (s *server) serve(ctx context.Context, ln net.Listener) error {
 	var wg sync.WaitGroup
 	wg.Go(func() { errs <- s.runner.Run(runCtx) })
 	wg.Go(func() { _ = s.sched.Run(runCtx, s.runner.Started()) })
+	wg.Go(func() {
+		select {
+		case <-s.runner.Started():
+			_ = s.setups.Run(runCtx)
+		case <-runCtx.Done():
+		}
+	})
 	wg.Go(func() {
 		if err := s.http.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 			errs <- fmt.Errorf("http: %w", err)

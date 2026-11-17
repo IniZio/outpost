@@ -104,6 +104,10 @@ func (a *Agent) Launch(_ context.Context, f ports.LaunchFor) (ports.Launch, erro
 	}, nil
 }
 
+// Profile is the commands that install the owner's plugins into a home, for a setup build to bake
+// into its image.
+func (a *Agent) Profile() [][]string { return a.setup() }
+
 // setup adds the marketplaces and installs the plugins. Both commands succeed when the thing is
 // there already.
 func (a *Agent) setup() [][]string {

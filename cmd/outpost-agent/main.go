@@ -19,7 +19,8 @@ const usage = `usage: outpost-agent <command>
   run                        link to the server and run its boxes
 
 Settings: OUTPOST_AGENT_DIR (default ~/.config/outpost-agent), OUTPOST_TOOLS_IMAGE,
-OUTPOST_BOX_PREFIX, OUTPOST_BOX_LABEL, OUTPOST_BOX_NETWORK, OUTPOST_BOX_MEMORY, OUTPOST_LOG.`
+OUTPOST_BOX_PREFIX, OUTPOST_BOX_LABEL, OUTPOST_BOX_NETWORK, OUTPOST_BOX_MEMORY, OUTPOST_LOG,
+OUTPOST_AGENT_DATA (default ~/.local/share/outpost-agent), OUTPOST_SETUP_CACHE_MAX (default 20gb).`
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
