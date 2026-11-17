@@ -79,6 +79,7 @@ func (d *Docker) BuildSetup(ctx context.Context, s ports.SetupSpec, report ports
 	defer func() { _ = os.RemoveAll(b.work) }()
 	got, err := b.run(ctx)
 	if err != nil {
+		_ = d.prune(context.WithoutCancel(ctx)) // a failed build's cache counts too; a missing builder is fine
 		return ports.SetupBuilt{}, fmt.Errorf("%w\n%s", err, tail(string(b.log.bytes()), 2000))
 	}
 	got.Log = tail(string(b.log.bytes()), logTail)

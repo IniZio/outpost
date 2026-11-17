@@ -102,6 +102,10 @@ func (r *rig) build(req ops.SetupBuildReq) ([]string, ops.SetupBuilt, error) {
 		return nil, ops.SetupBuilt{}, fmt.Errorf("open: %w", err)
 	}
 	defer func() { _ = st.Close() }()
+	return readBuild(st)
+}
+
+func readBuild(st link.Stream) ([]string, ops.SetupBuilt, error) {
 	var phases []string
 	sc := bufio.NewScanner(st)
 	for sc.Scan() {
@@ -124,23 +128,23 @@ func (r *rig) build(req ops.SetupBuildReq) ([]string, ops.SetupBuilt, error) {
 func TestASetupBuildIsJoinedByARepeatCall(t *testing.T) {
 	b := &builder{let: make(chan struct{})}
 	r := newRig(t, func(c *machine.Config) { c.Builder = b })
-	type result struct {
-		got ops.SetupBuilt
-		err error
+	streams := make([]link.Stream, 2)
+	for i := range streams {
+		_, st, err := link.Open(r.ctx(), r.link, ops.SetupBuild, buildReq(2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = st.Close() })
+		sc := bufio.NewScanner(st)
+		if !sc.Scan() {
+			t.Fatal("no first phase")
+		}
+		streams[i] = st
 	}
-	out := make(chan result, 2)
-	for range 2 {
-		go func() {
-			_, got, err := r.build(buildReq(2))
-			out <- result{got, err}
-		}()
-	}
-	time.Sleep(100 * time.Millisecond)
 	close(b.let)
-	for range 2 {
-		res := <-out
-		if res.err != nil || res.got.Image != "obd-setup/o--main:r2" {
-			t.Fatalf("%+v", res)
+	for _, st := range streams {
+		if _, got, err := readBuild(st); err != nil || got.Image != "obd-setup/o--main:r2" {
+			t.Fatalf("%+v %v", got, err)
 		}
 	}
 	if len(b.specs) != 1 || !slices.Equal(b.specs[0].Keep, []int{1}) || b.specs[0].Base != "ob-base:1" {

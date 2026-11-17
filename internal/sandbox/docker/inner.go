@@ -94,7 +94,12 @@ func (d *Docker) tidy(ctx context.Context, s ports.SetupSpec) error {
 	if err := d.dropInner(ctx, s.Repo, keep, tags); err != nil {
 		return err
 	}
-	_, err = d.docker(ctx, "buildx", "prune", "--builder", d.cfg.Builder, "--force", "--max-used-space", d.cfg.CacheMax)
+	return d.prune(ctx)
+}
+
+// prune caps the builder's cache at Config.CacheMax.
+func (d *Docker) prune(ctx context.Context) error {
+	_, err := d.docker(ctx, "buildx", "prune", "--builder", d.cfg.Builder, "--force", "--max-used-space", d.cfg.CacheMax)
 	return err
 }
 

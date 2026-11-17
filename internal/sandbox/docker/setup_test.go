@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,5 +144,28 @@ func checkSets(t *testing.T, d *Docker, want map[string]bool) {
 		if _, err := os.Stat(filepath.Join(d.innerRoot("o/r"), key)); (err == nil) != stays {
 			t.Errorf("%s stays = %v, want %v", key, err == nil, stays)
 		}
+	}
+}
+
+// failingHost fails every host command with what it printed.
+type failingHost struct{}
+
+func (failingHost) Run(_ context.Context, _ string, _ []string, out io.Writer, name string, _ ...string) error {
+	_, _ = io.WriteString(out, "fatal: could not read from remote\n")
+	return errors.New(name + " failed")
+}
+
+func TestAFailedBuildCarriesItsLogAndStillCapsTheCache(t *testing.T) {
+	h := &host{answer: func(string) (string, error) { return "", nil }}
+	d, err := New(Config{Tools: "t", Data: t.TempDir(), Run: h, Host: failingHost{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.BuildSetup(context.Background(), ports.SetupSpec{Repo: "o/r", Rev: 1, Base: "b"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "could not read from remote") {
+		t.Fatalf("the error carries the log: %v", err)
+	}
+	if len(h.ran("buildx prune --builder ob-setup")) != 1 {
+		t.Fatalf("the cache is capped after a failed build too: %v", h.calls)
 	}
 }
