@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 // agent serves the box ops with scripted answers.
 type agent struct {
 	converges atomic.Int32
+	builds    atomic.Int32
 	budget    atomic.Int64
 	watchers  atomic.Int32
 }
@@ -30,6 +32,7 @@ func (a *agent) registry() *link.Registry {
 	link.Handle(r, ops.Ping, func(_ context.Context, _ link.Meta, q ops.PingReq) (ops.PingResp, error) { return ops.PingResp(q), nil })
 	link.Handle(r, ops.Status, func(context.Context, link.Meta, struct{}) (ops.StatusResp, error) { return ops.StatusResp{}, nil })
 	link.HandleStream(r, ops.BoxConverge, a.converge)
+	link.HandleStream(r, ops.SetupBuild, a.build)
 	link.HandleResumable(r, ops.BoxWatch, a.watch)
 	unit := func(context.Context, link.Meta, ops.BoxRef) (struct{}, error) { return struct{}{}, nil }
 	for _, op := range []link.Op[ops.BoxRef, struct{}]{ops.BoxInterrupt, ops.BoxKill, ops.BoxStop, ops.BoxRelease} {
@@ -72,6 +75,22 @@ func (a *agent) converge(_ context.Context, _ link.Meta, q ops.ConvergeReq) (str
 			return nil
 		}
 		return enc.Encode(ops.ConvergeLine{Done: &ops.Converged{Revived: true}})
+	}, nil
+}
+
+// build cuts its first stream after a phase, fails revision 9, and finishes the rest.
+func (a *agent) build(_ context.Context, _ link.Meta, q ops.SetupBuildReq) (struct{}, link.Bytes, error) {
+	n := a.builds.Add(1)
+	return struct{}{}, func(_ context.Context, s link.Stream) error {
+		enc := json.NewEncoder(s)
+		_ = enc.Encode(ops.SetupLine{Phase: &ops.Phase{Phase: "Building"}})
+		switch {
+		case n == 1:
+			return nil
+		case q.Rev == 9:
+			return enc.Encode(ops.SetupLine{Err: &link.Error{Code: link.CodeInternal, Msg: "step 2 failed"}})
+		}
+		return enc.Encode(ops.SetupLine{Done: &ops.SetupBuilt{Image: "img:r1", Digest: "sha256:1", Inner: "k", Commit: "c"}})
 	}, nil
 }
 
@@ -124,6 +143,23 @@ func TestConvergeRejoinsACutJob(t *testing.T) {
 	p.Target.Run = 9
 	if _, err := b.Converge(ctx(t), p, nil); !errors.Is(err, &link.Error{Code: link.CodeRefused}) {
 		t.Fatalf("a refusal is final: %v", err)
+	}
+}
+
+func TestBuildSetupRejoinsACutBuild(t *testing.T) {
+	a, rig, b := setup(t)
+	var phases []string
+	s := ports.SetupSpec{Repo: "o/r", Rev: 1, Files: map[string]string{domain.SetupBake: "x"}, Base: "base:1"}
+	got, err := b.BuildSetup(ctx(t), rig.Machine, s, time.Hour, func(phase, _ string) { phases = append(phases, phase) })
+	if err != nil || got != (ports.SetupBuilt{Image: "img:r1", Digest: "sha256:1", Inner: "k", Commit: "c"}) || len(phases) != 2 {
+		t.Fatalf("%+v %v, phases %v", got, err, phases)
+	}
+	s.Rev = 9
+	if _, err := b.BuildSetup(ctx(t), rig.Machine, s, time.Hour, nil); err == nil || !strings.Contains(err.Error(), "step 2 failed") {
+		t.Fatalf("a failed build is final: %v", err)
+	}
+	if n := a.builds.Load(); n != 3 {
+		t.Fatalf("calls %d", n)
 	}
 }
 

@@ -102,7 +102,7 @@ func (b *Boxes) budget(ctx context.Context, def time.Duration) time.Duration {
 // a cut it calls again with the same plan, which joins the job still running on the machine.
 func (b *Boxes) Converge(ctx context.Context, p ports.Plan, report ports.Progress) (ports.Converged, error) {
 	req := ops.ConvergeReq{
-		Box: ref(p.Target), Image: p.Image, Fresh: p.Fresh, Repos: p.Repos, Env: p.Env, CA: p.CA,
+		Box: ref(p.Target), Image: p.Image, Inner: p.Inner, Fresh: p.Fresh, Repos: p.Repos, Env: p.Env, CA: p.CA,
 		Argv: p.Launch.Argv, Setup: p.Launch.Setup, Budget: b.budget(ctx, b.cfg.StartBudget),
 	}
 	for _, f := range p.Launch.Home {
