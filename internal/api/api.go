@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -58,6 +59,9 @@ type Config struct {
 	// Schedules is nil when this server runs no schedules, and their routes answer 501.
 	Schedules *schedule.Service
 	Clock     domain.Clock
+	// Web is the root of the web files: watch.html, watch.js and watch.css, and optionally app/
+	// with the built UI. Nil serves the embedded files.
+	Web fs.FS
 	// PublicURL is where people reach the server, for sign-in links.
 	PublicURL string
 	Log       *slog.Logger

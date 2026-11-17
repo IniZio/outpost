@@ -1,2 +1,4 @@
 bin/
 .data/
+internal/api/web/app/
+node_modules/
