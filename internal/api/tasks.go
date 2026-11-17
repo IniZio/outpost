@@ -42,7 +42,7 @@ func view(t domain.Task, a domain.Access) client.Task {
 	v := client.Task{
 		ID: int64(t.ID), Owner: string(t.Owner), Kind: kindNames[t.Kind], Repo: string(t.Spec.Repo),
 		Title: t.Spec.Title, Prompt: t.Spec.Prompt, Status: t.Status().String(), Phase: t.Phase(),
-		Machine: string(t.Machine), CreatedAt: t.CreatedAt, Access: "watch",
+		Machine: string(t.Machine), CreatedAt: t.CreatedAt, ScheduleID: int64(t.Spec.Schedule), Access: "watch",
 	}
 	for _, r := range t.Spec.Also {
 		v.Also = append(v.Also, string(r))
@@ -56,7 +56,7 @@ func view(t domain.Task, a domain.Access) client.Task {
 	case domain.Closing:
 		v.Summary = l.Summary
 	case domain.Ended:
-		v.Summary, v.Error = l.Summary, l.Error
+		v.Summary, v.Error, v.EndedAt = l.Summary, l.Error, optTime(l.At)
 	}
 	return v
 }
@@ -112,32 +112,51 @@ var statusByName = func() map[string]domain.Status {
 }()
 
 // listTasks lists the caller's own tasks. Teammates' tasks join the list when sharing lands.
+// ?schedule=NAME keeps only the runs of that schedule, taken from the newest 200 tasks.
 func (s *Server) listTasks(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
-	q := r.URL.Query()
-	tq := lifecycle.TaskQuery{Owner: p.Login, Limit: 50}
-	if name := q.Get("status"); name != "" {
-		st, ok := statusByName[name]
-		if !ok {
-			return fmt.Errorf("%w: unknown status %q", errBadRequest, name)
+	tq, err := taskQuery(r, p)
+	if err != nil {
+		return err
+	}
+	var only domain.ScheduleID
+	if name := r.URL.Query().Get("schedule"); name != "" {
+		e, err := s.cfg.Schedules.Get(r.Context(), p.Login, name)
+		if err != nil {
+			return err //nolint:wrapcheck // schedule wraps its own
 		}
-		tq.Status = st
+		only, tq.Limit = e.ID, 200
 	}
-	before, err1 := intParam(q.Get("before"), 0, 1<<62)
-	limit, err2 := intParam(q.Get("limit"), 50, 200)
-	if err1 != nil || err2 != nil {
-		return fmt.Errorf("%w: before and limit are numbers", errBadRequest)
-	}
-	tq.Before, tq.Limit = domain.TaskID(before), int(limit)
 	ts, err := s.cfg.Tasks.List(r.Context(), tq)
 	if err != nil {
 		return err //nolint:wrapcheck // lifecycle wraps its own
 	}
 	out := make([]client.Task, 0, len(ts))
 	for _, t := range ts {
-		out = append(out, view(t, t.AccessFor(p.Login, false)))
+		if only == 0 || t.Spec.Schedule == only {
+			out = append(out, view(t, t.AccessFor(p.Login, false)))
+		}
 	}
 	reply(w, http.StatusOK, out)
 	return nil
+}
+
+func taskQuery(r *http.Request, p auth.Principal) (lifecycle.TaskQuery, error) {
+	q := r.URL.Query()
+	tq := lifecycle.TaskQuery{Owner: p.Login}
+	if name := q.Get("status"); name != "" {
+		st, ok := statusByName[name]
+		if !ok {
+			return tq, fmt.Errorf("%w: unknown status %q", errBadRequest, name)
+		}
+		tq.Status = st
+	}
+	before, err1 := intParam(q.Get("before"), 0, 1<<62)
+	limit, err2 := intParam(q.Get("limit"), 50, 200)
+	if err1 != nil || err2 != nil {
+		return tq, fmt.Errorf("%w: before and limit are numbers", errBadRequest)
+	}
+	tq.Before, tq.Limit = domain.TaskID(before), int(limit)
+	return tq, nil
 }
 
 // intParam parses an optional number in [0, max], def when empty.

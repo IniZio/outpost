@@ -22,7 +22,11 @@ type Task struct {
 	Summary   string    `json:"summary,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
-	Access    string    `json:"access"`
+	// EndedAt is when the run ended, and ScheduleID names the schedule that fired it; both are
+	// absent when they do not apply.
+	EndedAt    *time.Time `json:"ended_at,omitempty"`
+	ScheduleID int64      `json:"schedule_id,omitempty"`
+	Access     string     `json:"access"`
 }
 
 // Ended reports whether the task's status is final: done, failed or stopped.
@@ -147,6 +151,7 @@ func (e *Error) Error() string { return fmt.Sprintf("%s (%d): %s", e.Code, e.Sta
 // Schedule is a recurring task. Cron has five fields, read in TZ. The Last fields and Next are
 // read-only: the server fills them.
 type Schedule struct {
+	ID          int64      `json:"id,omitempty"`
 	Name        string     `json:"name"`
 	Cron        string     `json:"cron"`
 	TZ          string     `json:"tz"`

@@ -16,6 +16,8 @@ var errNoSchedules = errors.New("schedules are not run by this server")
 func (s *Server) scheduleRoutes() {
 	m := s.mux
 	m.HandleFunc("GET /api/schedules", s.watch(s.listSchedules))
+	m.HandleFunc("GET /api/schedules/{name}", s.watch(s.getSchedule))
+	m.HandleFunc("DELETE /api/schedules/{name}", s.act(s.deleteSchedule))
 	m.HandleFunc("PUT /api/schedules/{name}", s.act(s.putSchedule))
 	m.HandleFunc("POST /api/schedules/{name}/fire", s.act(s.fireSchedule))
 	for verb, on := range map[string]bool{"enable": true, "disable": false} {
@@ -34,7 +36,7 @@ func optTime(t time.Time) *time.Time {
 
 func scheduleView(e schedule.Entry) client.Schedule {
 	v := client.Schedule{
-		Name: e.Name, Cron: e.Cron, TZ: e.TZ, Repo: string(e.Spec.Repo), Prompt: e.Spec.Prompt, Title: e.Spec.Title,
+		ID: int64(e.ID), Name: e.Name, Cron: e.Cron, TZ: e.TZ, Repo: string(e.Spec.Repo), Prompt: e.Spec.Prompt, Title: e.Spec.Title,
 		TimeoutMin: int(e.Spec.Timeout / time.Minute), Enabled: e.Enabled,
 		Next: optTime(e.Next), LastDue: optTime(e.LastDue), LastTask: int64(e.LastTask), LastSkipped: optTime(e.LastSkipped),
 	}
@@ -57,6 +59,29 @@ func (s *Server) listSchedules(w http.ResponseWriter, r *http.Request, p auth.Pr
 		out = append(out, scheduleView(e))
 	}
 	reply(w, http.StatusOK, out)
+	return nil
+}
+
+func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
+	if s.cfg.Schedules == nil {
+		return errNoSchedules
+	}
+	e, err := s.cfg.Schedules.Get(r.Context(), p.Login, r.PathValue("name"))
+	if err != nil {
+		return err //nolint:wrapcheck // schedule wraps its own
+	}
+	reply(w, http.StatusOK, scheduleView(e))
+	return nil
+}
+
+func (s *Server) deleteSchedule(w http.ResponseWriter, r *http.Request, p auth.Principal) error {
+	if s.cfg.Schedules == nil {
+		return errNoSchedules
+	}
+	if err := s.cfg.Schedules.Delete(r.Context(), p.Login, r.PathValue("name")); err != nil {
+		return err //nolint:wrapcheck // schedule wraps its own
+	}
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 

@@ -27,7 +27,8 @@ func (s *Store) PutSchedule(_ context.Context, row ports.ScheduleRow) (domain.Sc
 			return row.ID, nil
 		}
 	}
-	row.ID = domain.ScheduleID(len(s.scheds) + 1)
+	s.lastSched++
+	row.ID = s.lastSched
 	s.scheds = append(s.scheds, row)
 	return row.ID, nil
 }
@@ -73,4 +74,23 @@ func (s *Store) Skip(_ context.Context, id domain.ScheduleID, due, _ time.Time) 
 	}
 	s.slots[slot(id, due)] = 0
 	return nil
+}
+
+// DeleteSchedule removes the schedule and its slots.
+func (s *Store) DeleteSchedule(_ context.Context, owner domain.Login, name string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, x := range s.scheds {
+		if x.Owner != owner || x.Name != name {
+			continue
+		}
+		s.scheds = append(s.scheds[:i], s.scheds[i+1:]...)
+		for k := range s.slots {
+			if k.Schedule == x.ID {
+				delete(s.slots, k)
+			}
+		}
+		return true, nil
+	}
+	return false, nil
 }

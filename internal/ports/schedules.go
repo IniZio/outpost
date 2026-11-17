@@ -42,6 +42,10 @@ type Schedules interface {
 	// Schedules lists every schedule in id order.
 	Schedules(ctx context.Context) ([]ScheduleRow, error)
 
+	// DeleteSchedule removes the owner's schedule of that name with its slots, and reports whether
+	// it existed. Tasks it already fired stay.
+	DeleteSchedule(ctx context.Context, owner domain.Login, name string) (bool, error)
+
 	// Skip records a slot that was not fired. A slot that already has a row is ErrFired.
 	Skip(ctx context.Context, id domain.ScheduleID, due, at time.Time) error
 }

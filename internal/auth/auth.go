@@ -29,10 +29,12 @@ var (
 	ErrNotAllowed = errors.New("auth: this GitHub login may not use this server")
 )
 
-// Principal is who made a request. Act is false for a watch-only web session.
+// Principal is who made a request. Act is false for a watch-only web session. Cookie is true when
+// the browser's cookie, not a bearer token, proved it, which is when the API checks the origin.
 type Principal struct {
-	Login domain.Login
-	Act   bool
+	Login  domain.Login
+	Act    bool
+	Cookie bool
 }
 
 // Config wires a Service. Zero TTLs take the defaults.
@@ -44,11 +46,14 @@ type Config struct {
 	// Allowed are the logins that may trade a GitHub token. Empty allows nobody.
 	Allowed []domain.Login
 	// Secure marks the cookie Secure, for a server behind https.
-	Secure   bool
-	TokenTTL time.Duration
-	LinkTTL  time.Duration
-	WebTTL   time.Duration
-	Rand     io.Reader
+	Secure bool
+	// WebControl lets a web session act, not only watch. It is for a local trial of the web UI and
+	// off by default.
+	WebControl bool
+	TokenTTL   time.Duration
+	LinkTTL    time.Duration
+	WebTTL     time.Duration
+	Rand       io.Reader
 }
 
 // Service mints and checks tokens.
@@ -91,7 +96,8 @@ func (s *Service) Exchange(ctx context.Context, githubToken string) (string, dom
 	return tok, login, err
 }
 
-// WebLink returns a one-time code that Redeem turns into a watch-only cookie.
+// WebLink returns a one-time code that Redeem turns into a web cookie, which only watches unless
+// Config.WebControl is set.
 func (s *Service) WebLink(ctx context.Context, login domain.Login) (string, error) {
 	return s.put(ctx, login, ports.SessionLink, "web-link", s.cfg.LinkTTL)
 }
@@ -132,7 +138,8 @@ func (s *Service) Authenticate(r *http.Request) (Principal, error) {
 	if !ok && x.Kind != ports.SessionWeb || ok && x.Kind != ports.SessionAPI {
 		return Principal{}, ErrNoSession
 	}
-	return Principal{Login: x.Login, Act: x.Kind == ports.SessionAPI}, nil
+	act := x.Kind == ports.SessionAPI || x.Kind == ports.SessionWeb && s.cfg.WebControl
+	return Principal{Login: x.Login, Act: act, Cookie: !ok}, nil
 }
 
 // SignOut deletes the session the request carries.

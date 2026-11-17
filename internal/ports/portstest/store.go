@@ -15,18 +15,19 @@ import (
 // Store keeps records, timelines, outbox rows, repos and machines in maps. Commit restores what it
 // stores, so a record a real store would reject fails the test too. Crash simulates a restart.
 type Store struct {
-	mu       sync.Mutex
-	tasks    map[domain.TaskID]domain.Record
-	timeline map[domain.TaskID][]domain.Entry
-	outbox   []ports.OutboxRow
-	done     map[ports.OutboxID]bool
-	repos    map[domain.RepoName]domain.Repo
-	machines map[domain.MachineID]ports.MachineState
-	nextID   domain.TaskID
-	nextRow  ports.OutboxID
-	lease    chan struct{}
-	scheds   []ports.ScheduleRow
-	slots    map[ports.FireRow]domain.TaskID
+	mu        sync.Mutex
+	tasks     map[domain.TaskID]domain.Record
+	timeline  map[domain.TaskID][]domain.Entry
+	outbox    []ports.OutboxRow
+	done      map[ports.OutboxID]bool
+	repos     map[domain.RepoName]domain.Repo
+	machines  map[domain.MachineID]ports.MachineState
+	nextID    domain.TaskID
+	nextRow   ports.OutboxID
+	lease     chan struct{}
+	scheds    []ports.ScheduleRow
+	slots     map[ports.FireRow]domain.TaskID
+	lastSched domain.ScheduleID
 
 	conflicts int
 	commitErr faults

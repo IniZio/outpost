@@ -316,6 +316,23 @@ func (c *Client) Schedules(ctx context.Context) ([]Schedule, error) {
 	return out, c.do(ctx, http.MethodGet, "/api/schedules", nil, &out)
 }
 
+// GetSchedule returns one of the caller's schedules.
+func (c *Client) GetSchedule(ctx context.Context, name string) (Schedule, error) {
+	var out Schedule
+	return out, c.do(ctx, http.MethodGet, schedulePath(name, ""), nil, &out)
+}
+
+// DeleteSchedule removes one of the caller's schedules. Its earlier runs stay.
+func (c *Client) DeleteSchedule(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, schedulePath(name, ""), nil, nil)
+}
+
+// ScheduleRuns lists the runs of one schedule among the caller's newest 200 tasks, newest first.
+func (c *Client) ScheduleRuns(ctx context.Context, name string) ([]Task, error) {
+	var out []Task
+	return out, c.do(ctx, http.MethodGet, "/api/tasks?schedule="+url.QueryEscape(name), nil, &out)
+}
+
 // PutSchedule creates or replaces one of the caller's schedules by name.
 func (c *Client) PutSchedule(ctx context.Context, s Schedule) (Schedule, error) {
 	var out Schedule

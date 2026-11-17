@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -112,6 +113,9 @@ func (s *Server) authed(h handler, needAct bool) http.HandlerFunc {
 		if err == nil && needAct && !p.Act {
 			err = errWatchOnly
 		}
+		if err == nil && needAct && p.Cookie && !sameOrigin(r) {
+			err = errCrossOrigin
+		}
 		if err == nil {
 			err = h(w, r, p)
 		}
@@ -131,10 +135,11 @@ func (s *Server) open(h func(w http.ResponseWriter, r *http.Request) error) http
 
 // Errors of the API's own.
 var (
-	errWatchOnly  = errors.New("this session can only watch; use an API token")
-	errNotFound   = errors.New("not found")
-	errBadRequest = errors.New("bad request")
-	errNoSecrets  = errors.New("secrets are not stored on this server yet")
+	errWatchOnly   = errors.New("this session can only watch; use an API token")
+	errCrossOrigin = errors.New("a browser may act only from this server's own pages")
+	errNotFound    = errors.New("not found")
+	errBadRequest  = errors.New("bad request")
+	errNoSecrets   = errors.New("secrets are not stored on this server yet")
 )
 
 type problem struct {
@@ -149,6 +154,7 @@ var problems = []problem{
 	{auth.ErrNoSession, http.StatusUnauthorized, "no_session"},
 	{auth.ErrNotAllowed, http.StatusForbidden, "not_allowed"},
 	{errWatchOnly, http.StatusForbidden, "watch_only"},
+	{errCrossOrigin, http.StatusForbidden, "cross_origin"},
 	{domain.ErrForbidden, http.StatusForbidden, "forbidden"},
 	{lifecycle.ErrNotFound, http.StatusNotFound, "not_found"},
 	{schedule.ErrNotFound, http.StatusNotFound, "not_found"},
@@ -208,4 +214,11 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 func (s *Server) status(w http.ResponseWriter, _ *http.Request) error {
 	reply(w, http.StatusOK, client.Status{Leading: s.cfg.Tasks.Leading()})
 	return nil
+}
+
+// sameOrigin reports whether a browser request came from a page of this server. Browsers send
+// Origin on every write, so a missing or foreign one is refused: a cookie alone must not act.
+func sameOrigin(r *http.Request) bool {
+	o, err := url.Parse(r.Header.Get("Origin"))
+	return err == nil && o.Host != "" && o.Host == r.Host
 }

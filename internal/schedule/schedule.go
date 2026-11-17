@@ -175,6 +175,18 @@ func (s *Service) SetEnabled(ctx context.Context, owner domain.Login, name strin
 	return s.store(ctx, e.Row)
 }
 
+// Delete removes the owner's schedule of that name. Tasks it already fired stay.
+func (s *Service) Delete(ctx context.Context, owner domain.Login, name string) error {
+	ok, err := s.cfg.Store.DeleteSchedule(ctx, owner, name)
+	if err != nil {
+		return fmt.Errorf("schedule: delete %s: %w", name, err)
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNotFound, name)
+	}
+	return nil
+}
+
 // FireNow starts the schedule's task now. It claims no slot, so it neither blocks nor is blocked
 // by the cron.
 func (s *Service) FireNow(ctx context.Context, owner domain.Login, name string) (domain.Task, error) {

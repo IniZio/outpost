@@ -100,3 +100,9 @@ func slotErr(err error, what string) error {
 	}
 	return wrap(err, what)
 }
+
+// DeleteSchedule removes the owner's schedule of that name. Its slots go with it.
+func (s *Store) DeleteSchedule(ctx context.Context, owner domain.Login, name string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM schedules WHERE owner=$1 AND name=$2`, string(owner), name)
+	return tag.RowsAffected() > 0, wrap(err, "postgres: delete schedule")
+}

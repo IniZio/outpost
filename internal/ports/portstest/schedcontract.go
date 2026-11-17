@@ -48,6 +48,27 @@ func contractSchedules(t *testing.T, r StoreRig) {
 	if _, err := r.Store.Load(ctx, won); err != nil {
 		t.Fatalf("the winner's task: %v", err)
 	}
+	contractDeleteSchedule(t, r, won)
+}
+
+func contractDeleteSchedule(t *testing.T, r StoreRig, won domain.TaskID) {
+	t.Helper()
+	ctx := context.Background()
+	if ok, err := r.Schedules.DeleteSchedule(ctx, "bob", "audit"); err != nil || ok {
+		t.Fatalf("another owner deletes nothing: %v %v", ok, err)
+	}
+	if ok, err := r.Schedules.DeleteSchedule(ctx, "ana", "audit"); err != nil || !ok {
+		t.Fatalf("delete: %v %v", ok, err)
+	}
+	if ok, _ := r.Schedules.DeleteSchedule(ctx, "ana", "audit"); ok {
+		t.Fatal("a second delete finds nothing")
+	}
+	if rows, _ := r.Schedules.Schedules(ctx); len(rows) != 0 {
+		t.Fatalf("schedules after delete: %+v", rows)
+	}
+	if _, err := r.Store.Load(ctx, won); err != nil {
+		t.Fatalf("a fired task outlives its schedule: %v", err)
+	}
 }
 
 // raceFire commits two tasks for one slot at once and returns the id of the one that won.

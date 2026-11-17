@@ -30,6 +30,7 @@ type config struct {
 	ClaudeMarketplaces []string
 	ClaudePlugins      []string
 	Migrate            bool          // OUTPOST_MIGRATE: migrate at start
+	DevBrowserControl  bool          // OUTPOST_DEV_BROWSER_CONTROL: web sessions may act; for a local trial only
 	ProxyURL           string        // OUTPOST_PROXY_URL: the credential proxy boxes dial; empty runs boxes with no credentials
 	ProxyCAFile        string        // OUTPOST_PROXY_CA_FILE: the proxy's public CA
 	ProxyToken         string        // OUTPOST_PROXY_TOKEN: the bearer the proxy presents for grants
@@ -45,18 +46,19 @@ func loadConfig(env func(string) string) (config, error) {
 		return def
 	}
 	c := config{
-		DatabaseURL: env("OUTPOST_DATABASE_URL"),
-		Listen:      get("OUTPOST_LISTEN", ":7400"),
-		PublicURL:   strings.TrimRight(get("OUTPOST_PUBLIC_URL", "http://localhost:7400"), "/"),
-		AgentURL:    get("OUTPOST_AGENT_URL", "ws://127.0.0.1:7400/machines/link"),
-		SecretKey:   env("OUTPOST_SECRET_KEY"),
-		BaseImage:   env("OUTPOST_BASE_IMAGE"),
-		ClaudeModel: env("OUTPOST_CLAUDE_MODEL"),
-		ClaudeBin:   env("OUTPOST_CLAUDE_BIN"),
-		Migrate:     get("OUTPOST_MIGRATE", "true") == "true",
-		ProxyURL:    env("OUTPOST_PROXY_URL"),
-		ProxyCAFile: env("OUTPOST_PROXY_CA_FILE"),
-		ProxyToken:  env("OUTPOST_PROXY_TOKEN"),
+		DatabaseURL:       env("OUTPOST_DATABASE_URL"),
+		Listen:            get("OUTPOST_LISTEN", ":7400"),
+		PublicURL:         strings.TrimRight(get("OUTPOST_PUBLIC_URL", "http://localhost:7400"), "/"),
+		AgentURL:          get("OUTPOST_AGENT_URL", "ws://127.0.0.1:7400/machines/link"),
+		SecretKey:         env("OUTPOST_SECRET_KEY"),
+		BaseImage:         env("OUTPOST_BASE_IMAGE"),
+		ClaudeModel:       env("OUTPOST_CLAUDE_MODEL"),
+		ClaudeBin:         env("OUTPOST_CLAUDE_BIN"),
+		Migrate:           get("OUTPOST_MIGRATE", "true") == "true",
+		DevBrowserControl: env("OUTPOST_DEV_BROWSER_CONTROL") == "true",
+		ProxyURL:          env("OUTPOST_PROXY_URL"),
+		ProxyCAFile:       env("OUTPOST_PROXY_CA_FILE"),
+		ProxyToken:        env("OUTPOST_PROXY_TOKEN"),
 	}
 	c.Allowed = logins(env("OUTPOST_ALLOWED_LOGINS"))
 	c.ClaudeMarketplaces = list(env("OUTPOST_CLAUDE_MARKETPLACES"))

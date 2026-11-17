@@ -166,6 +166,7 @@ func (s *server) routes(v *secrets.Vault, grants http.Handler, clock domain.Cloc
 	a := auth.New(auth.Config{
 		Sessions: s.store, Clock: clock, Allowed: s.cfg.Allowed,
 		GitHubUser: githubUser, Secure: len(s.cfg.PublicURL) > 5 && s.cfg.PublicURL[:5] == "https",
+		WebControl: s.cfg.DevBrowserControl,
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", api.New(api.Config{
