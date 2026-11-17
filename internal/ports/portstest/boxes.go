@@ -192,6 +192,11 @@ func (b *Boxes) ReadFile(ctx context.Context, t ports.Target, path string) ([]by
 	return []byte(path), nil
 }
 
+// ReadTail is ReadFile: the fake's files are short.
+func (b *Boxes) ReadTail(ctx context.Context, t ports.Target, path string) ([]byte, error) {
+	return b.ReadFile(ctx, t, path)
+}
+
 // Exists reports whether Touch created path and Remove has not removed it.
 func (b *Boxes) Exists(ctx context.Context, t ports.Target, path string) (bool, error) {
 	if err := b.begin(ctx, Call{Method: "Exists", Target: t, Text: path}); err != nil {

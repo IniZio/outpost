@@ -215,7 +215,17 @@ func (b *Boxes) Release(ctx context.Context, t ports.Target) error {
 
 // ReadFile reads a file in the box. A missing file is fs.ErrNotExist.
 func (b *Boxes) ReadFile(ctx context.Context, t ports.Target, path string) ([]byte, error) {
-	r, err := link.Call(ctx, b.cfg.Links.Link(t.Machine), ops.BoxRead, ops.BoxPath{Box: ref(t), Path: path})
+	return b.read(ctx, ops.BoxPath{Box: ref(t), Path: path}, t)
+}
+
+// ReadTail reads the end of a file in the box. A missing file is fs.ErrNotExist.
+func (b *Boxes) ReadTail(ctx context.Context, t ports.Target, path string) ([]byte, error) {
+	return b.read(ctx, ops.BoxPath{Box: ref(t), Path: path, Tail: true}, t)
+}
+
+func (b *Boxes) read(ctx context.Context, q ops.BoxPath, t ports.Target) ([]byte, error) {
+	path := q.Path
+	r, err := link.Call(ctx, b.cfg.Links.Link(t.Machine), ops.BoxRead, q)
 	if err == nil && !r.Exists {
 		err = fs.ErrNotExist
 	}

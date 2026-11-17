@@ -66,6 +66,8 @@ type BoxState struct {
 // Paths are inside the box. It is split out so internal/agent/* can take it without the rest.
 type BoxFS interface {
 	ReadFile(ctx context.Context, t Target, path string) ([]byte, error)
+	// ReadTail reads the file's last bytes, as many as one read returns, for logs that outgrow it.
+	ReadTail(ctx context.Context, t Target, path string) ([]byte, error)
 	Exists(ctx context.Context, t Target, path string) (bool, error)
 	Remove(ctx context.Context, t Target, path string) error
 }

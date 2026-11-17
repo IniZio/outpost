@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -152,11 +153,13 @@ func mustJSON(t *testing.T, b []byte, v any) {
 	}
 }
 
-// boxFS is a map of box paths to contents.
+// boxFS is a map of box paths to contents. With max set it reads as the machine does: a whole
+// file over max is refused, and a tail read keeps the last max bytes.
 type boxFS struct {
 	mu    sync.Mutex
 	files map[string][]byte
 	err   error
+	max   int
 }
 
 func (b *boxFS) put(p string, data []byte) {
@@ -178,7 +181,20 @@ func (b *boxFS) ReadFile(_ context.Context, _ ports.Target, p string) ([]byte, e
 	if !ok {
 		return nil, fs.ErrNotExist
 	}
+	if b.max > 0 && len(d) > b.max {
+		return nil, errors.New("over the read limit")
+	}
 	return d, nil
+}
+
+func (b *boxFS) ReadTail(ctx context.Context, t ports.Target, p string) ([]byte, error) {
+	b.mu.Lock()
+	limit, d := b.max, b.files[p]
+	b.mu.Unlock()
+	if limit > 0 && len(d) > limit {
+		return d[len(d)-limit:], nil
+	}
+	return b.ReadFile(ctx, t, p)
 }
 
 func (b *boxFS) Exists(context.Context, ports.Target, string) (bool, error) { return false, nil }
@@ -223,6 +239,18 @@ func TestLastMessageSkipsAHalfWrittenTail(t *testing.T) {
 	got, _ := a.LastMessage(context.Background(), b, ports.Target{Task: 1})
 	if got != "Done. Opened PR 12 with the bumps." {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestLastMessageReadsTheEndOfALongTranscript(t *testing.T) {
+	a, b := rig(t)
+	data := fixture(t)
+	long := append(bytes.Repeat([]byte(`{"type":"user","message":{"content":"padding"}}`+"\n"), 2000), data...)
+	b.put(transcriptPath, long)
+	b.max = len(data) + 10
+	got, err := a.LastMessage(context.Background(), b, ports.Target{Task: 1})
+	if err != nil || got != "Done. Opened PR 12 with the bumps." {
+		t.Fatalf("got %q, %v", got, err)
 	}
 }
 

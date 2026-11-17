@@ -137,6 +137,8 @@ type (
 	BoxPath struct {
 		Box  BoxRef `json:"box"`
 		Path string `json:"path"`
+		// Tail reads only the file's last bytes, as many as one reply holds.
+		Tail bool `json:"tail,omitempty"`
 	}
 	// FileResp is a file's bytes, or whether it exists.
 	FileResp struct {

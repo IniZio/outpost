@@ -137,6 +137,10 @@ func checkFiles(t *testing.T, r *rig, b ops.BoxRef) {
 	if f, err := link.Call(ctx, r.link, ops.BoxRead, p); err != nil || !f.Exists || string(f.Data) != "done" {
 		t.Fatalf("read: %+v %v", f, err)
 	}
+	tail := ops.BoxPath{Box: b, Path: domain.DoneMarkerPath, Tail: true}
+	if f, err := link.Call(ctx, r.link, ops.BoxRead, tail); err != nil || !f.Exists || string(f.Data) != "done" {
+		t.Fatalf("tail read: %+v %v", f, err)
+	}
 	if _, err := link.Call(ctx, r.link, ops.BoxRemove, p); err != nil {
 		t.Fatal(err)
 	}

@@ -46,7 +46,7 @@ func readLast(ctx context.Context, bfs ports.BoxFS, t ports.Target) (string, err
 	if json.Unmarshal(raw, &ptr) != nil || ptr.Transcript == "" {
 		return "", nil
 	}
-	data, err := bfs.ReadFile(ctx, t, ptr.Transcript)
+	data, err := bfs.ReadTail(ctx, t, ptr.Transcript)
 	if err != nil {
 		return "", missingOK(err)
 	}

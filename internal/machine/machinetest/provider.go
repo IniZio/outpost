@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -290,6 +291,15 @@ func command(v fsView, argv []string) hc.ExecResult {
 		data, ok := v.get(last)
 		if !ok {
 			return execResult(1, "", "no such file")
+		}
+		return execResult(0, data, "")
+	case "tail": // tail -c N -- path
+		data, ok := v.get(last)
+		if !ok {
+			return execResult(1, "", "no such file")
+		}
+		if n, err := strconv.Atoi(argv[2]); err == nil && len(data) > n {
+			data = data[len(data)-n:]
 		}
 		return execResult(0, data, "")
 	case "rm":

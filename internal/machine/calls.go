@@ -167,7 +167,11 @@ func (m *Machine) inBox(ctx context.Context, r ops.BoxRef, argv ...string) (hc.E
 }
 
 func (m *Machine) read(ctx context.Context, _ link.Meta, q ops.BoxPath) (ops.FileResp, error) {
-	r, err := m.inBox(ctx, q.Box, "cat", "--", q.Path)
+	argv := []string{"cat", "--", q.Path}
+	if q.Tail {
+		argv = []string{"tail", "-c", strconv.Itoa(maxRead), "--", q.Path}
+	}
+	r, err := m.inBox(ctx, q.Box, argv...)
 	switch {
 	case err != nil:
 		return ops.FileResp{}, wire(err)
