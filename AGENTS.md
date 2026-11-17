@@ -59,6 +59,14 @@ depguard enforces this table. Other rules:
 - Keep host names, IP addresses, client repo names, people's details and links to private docs out of committed files.
 - Keep custom code small. Prefer stock tools: Docker, hc, gh and Claude Code.
 
+## Repo setup revisions
+
+A repo's setup is a revision of files (`outpost-cli repo setup put|ls|log|build`), built on a machine by `setup.build` with BuildKit into `<prefix>-setup/<owner>--<repo>:r<rev>`. The contract:
+
+- `docker-bake.hcl` has a target `box` (its Dockerfile takes `ARG BASE` and the named context `src`, the repo at the commit), an optional group `prepare` built first, and an optional group `inner` whose targets write `out/<name>.tar` with `type=docker,dest=`. Outpost sets `BASE`, `SRC` and the tag, and adds its own final stage (`outpost.json`, `outpost.Dockerfile`): the plugins in `/root` and `after-clone.sh` at `/etc/outpost/`.
+- The agent keeps a bare mirror per repo, the inner tars by content key, and build work dirs under `OUTPOST_AGENT_DATA`. Boxes from a build mount the mirror and the tars read-only, clone with `--reference`, load the tars in the background (`/run/box/images-ready`), and run `after-clone.sh` once.
+- A ready build becomes the repo's current one, and `ReadyFor` prefers it over the old template. After each build the machine keeps that revision and the one it replaced, removes older images and tar sets that no box uses, and prunes the builder cache to `OUTPOST_SETUP_CACHE_MAX`.
+
 ## Deploy
 
 `deploy/README.md` covers the cluster deploy (Helm chart in `deploy/helm/outpost`, images published by CI). `deploy/` also holds the one-host deploy: systemd user units for `outpost-go serve` and `outpost-go-agent run`, `stack.sh` for Postgres (`ob-pg`) and the credential proxy (`ob-proxy`), and `env.example`, which lists every `OUTPOST_*` setting. A test fails when the code reads a setting the template does not list. Names and ports stay apart from the prototype's (port 7300, the `outpost` network, `outpost-proxy`).
