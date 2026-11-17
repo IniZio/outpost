@@ -186,6 +186,9 @@ func (s *Store) Commit(_ context.Context, c ports.Commit) ([]ports.OutboxID, err
 	if tpl := c.Template; tpl != nil {
 		r := s.repos[tpl.Repo]
 		r.Name, r.ReadyImage, r.ReadyOn, r.ReadyAt = tpl.Repo, tpl.Template.Handle, tpl.Template.Machine, tpl.At
+		if tpl.Notes != "" {
+			r.Notes = tpl.Notes
+		}
 		s.repos[tpl.Repo] = r
 	}
 	return ids, nil

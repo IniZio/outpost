@@ -47,6 +47,7 @@ type TemplateRow struct {
 	Repo     domain.RepoName
 	Template Template
 	At       time.Time
+	Notes    string // the setup agent's notes; empty keeps the repo's notes
 }
 
 // Commit is one applied event, written in one transaction: the task as a Record, its new timeline

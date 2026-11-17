@@ -348,10 +348,20 @@ func contractRepo(t *testing.T, r StoreRig) {
 	if got.ReadyImage != "img:1" || got.ReadyOn != "m1" || !got.ReadyAt.Equal(contractT0) || got.Notes != "keep me" || got.SetupTask != 7 {
 		t.Fatalf("repo after a template save: %+v", got)
 	}
+	tpl.Notes = "new notes"
+	again := closingTask(1, contractT0.Add(time.Second))
+	again.Version = 2
+	if _, err := r.Store.Commit(ctx, ports.Commit{Prev: 1, Task: again.Record(), Template: tpl}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = r.Store.Repo(ctx, "acme/app"); got.Notes != "new notes" {
+		t.Fatalf("a save with notes replaces them: %+v", got)
+	}
+	tpl.Notes = ""
 	tpl.Repo = "acme/new"
 	next := closingTask(1, contractT0.Add(time.Minute))
-	next.Version = 2
-	if _, err := r.Store.Commit(ctx, ports.Commit{Prev: 1, Task: next.Record(), Template: tpl}); err != nil {
+	next.Version = 3
+	if _, err := r.Store.Commit(ctx, ports.Commit{Prev: 2, Task: next.Record(), Template: tpl}); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ = r.Store.Repo(ctx, "acme/new"); got.Name != "acme/new" || got.ReadyImage != "img:1" {

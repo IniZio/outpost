@@ -138,9 +138,10 @@ func upsertTemplate(ctx context.Context, tx pgx.Tx, t *ports.TemplateRow) error 
 	if t == nil {
 		return nil
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO repos (name, ready_image, ready_on, ready_at) VALUES ($1,$2,$3,$4)
-		ON CONFLICT (name) DO UPDATE SET ready_image = $2, ready_on = $3, ready_at = $4`,
-		string(t.Repo), t.Template.Handle, string(t.Template.Machine), t.At)
+	_, err := tx.Exec(ctx, `INSERT INTO repos (name, ready_image, ready_on, ready_at, notes) VALUES ($1,$2,$3,$4,$5)
+		ON CONFLICT (name) DO UPDATE SET ready_image = $2, ready_on = $3, ready_at = $4,
+			notes = CASE WHEN $5 = '' THEN repos.notes ELSE $5 END`,
+		string(t.Repo), t.Template.Handle, string(t.Template.Machine), t.At, t.Notes)
 	return wrap(err, "postgres: template")
 }
 

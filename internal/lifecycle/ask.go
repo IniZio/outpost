@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/IniZio/outpost/internal/domain"
 	"github.com/IniZio/outpost/internal/ports"
@@ -100,11 +101,12 @@ func (r *Runner) ensure(ctx context.Context, t domain.Task, e domain.EnsureRunni
 
 // saveTemplate answers SaveTemplate, with the repo row to write if the domain accepts the answer.
 func (r *Runner) saveTemplate(ctx context.Context, t domain.Task, e domain.SaveTemplate) (answer, error) {
+	notes, _ := r.cfg.Boxes.ReadFile(ctx, target(t), domain.NotesPath) // no notes keeps the old ones
 	tpl, err := r.cfg.Boxes.SaveTemplate(ctx, target(t))
 	if err != nil {
 		return answer{}, fmt.Errorf("lifecycle: save template: %w", err)
 	}
-	row := &ports.TemplateRow{Repo: t.Spec.Repo, Template: tpl, At: r.cfg.Clock.Now()}
+	row := &ports.TemplateRow{Repo: t.Spec.Repo, Template: tpl, At: r.cfg.Clock.Now(), Notes: strings.TrimSpace(string(notes))}
 	return answer{ev: domain.TemplateSaved{Ask: e.Ask, Tag: tpl.Handle}, template: row}, nil
 }
 

@@ -9,6 +9,10 @@ import (
 // DoneMarkerPath is the file an unattended agent touches when the whole task is complete.
 const DoneMarkerPath = "/run/outpost/done"
 
+// NotesPath is where a setup agent writes the repo's notes. They become the repo's notes when the
+// template is saved, and every later task's prompt carries them.
+const NotesPath = "/run/outpost/notes.md"
+
 // RepoDir is where a repo is checked out in the box.
 func RepoDir(r RepoName) string {
 	_, name, _ := strings.Cut(string(r), "/")
@@ -62,7 +66,7 @@ func kindLines(t Task, task string) []string {
 			"1. Read the README, AGENTS.md or CLAUDE.md, CI workflows, Dockerfiles and compose files to learn the toolchains.",
 			"2. Install the toolchains and system packages (prefer mise for language runtimes; apt for system packages), and fetch dependencies so caches are warm.",
 			"3. Prove it: build, run the unit tests, and if there is a compose stack bring it up once and check it answers, then bring it down.",
-			"4. Write /run/outpost/notes.md: what you installed, how to build, test and start the stack, and any test users or gotchas. Keep it short and factual.",
+			"4. Write " + NotesPath + ": what you installed, how to build, test and start the stack, and any test users or gotchas. Keep it short and factual.",
 			"Do not commit, push or open PRs, and do not edit tracked files.",
 			"Nobody is watching this run. When everything above is done, run `touch " + DoneMarkerPath + "`, then reply with a one-paragraph summary.",
 		}

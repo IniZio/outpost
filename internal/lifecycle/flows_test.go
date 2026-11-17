@@ -96,6 +96,7 @@ func TestTemplateSave(t *testing.T) {
 	store.AddMachine(domain.Machine{ID: "m2", Owner: owner, Role: domain.RoleSandbox, Slots: 4}, true)
 	id := g.started(domain.KindSetup)
 	g.boxes.Touch(id, domain.DoneMarkerPath)
+	g.boxes.Touch(id, domain.NotesPath)
 	g.agent.SetSummary("Prepared and tested.")
 	g.feed(id, domain.AgentReport{Run: 1, Status: domain.HCWorking})
 	g.feed(id, domain.AgentReport{Run: 1, Status: domain.HCIdle})
@@ -106,7 +107,7 @@ func TestTemplateSave(t *testing.T) {
 		t.Fatalf("ended as %v with %+v", tk.Status(), tk.Life)
 	}
 	repo, _ := store.Repo(g.ctx, "acme/app")
-	if repo.ReadyImage != "ready-1" || repo.ReadyOn != machine {
+	if repo.ReadyImage != "ready-1" || repo.ReadyOn != machine || repo.Notes != domain.NotesPath {
 		t.Fatalf("repo %+v: the template and its machine must be recorded", repo)
 	}
 
