@@ -212,7 +212,8 @@ type Placement struct {
 }
 
 // PickStarts returns the queued tasks to start now, lowest id first, each with a machine that may
-// host it, up to the free slots. A task goes to the machine holding its repo's ready template when
+// host it, up to the free slots. A task goes to the machine holding its repo's setup build, or else
+// its ready template, when
 // that machine has room, and otherwise to any machine, where it starts from the base image. The
 // lifecycle feeds each result SlotGranted. Two callers racing on the same id is safe: the second
 // SlotGranted finds the task no longer Queued and is dropped.
@@ -242,6 +243,9 @@ func readyOn(repos []Repo) map[RepoName]MachineID {
 	ready := make(map[RepoName]MachineID, len(repos))
 	for _, r := range repos {
 		ready[r.Name] = r.ReadyOn
+		if r.Setup.Image != "" {
+			ready[r.Name] = r.Setup.Machine
+		}
 	}
 	return ready
 }

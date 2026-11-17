@@ -124,6 +124,21 @@ func TestPlacementPrefersTheMachineHoldingTheTemplate(t *testing.T) {
 	}
 }
 
+// A repo's setup build wins over its template: placement and the plan follow it.
+func TestPlacementAndPlanFollowTheSetupBuild(t *testing.T) {
+	store := newStore()
+	g := newRig(t, store)
+	store.AddMachine(domain.Machine{ID: "m2", Owner: owner, Role: domain.RoleSandbox, Slots: 1}, true)
+	build := domain.SetupBuild{Rev: 3, Image: "obd-setup/acme--app:r3", Inner: "0123456789abcdef", Machine: "m2"}
+	store.SetRepo(domain.Repo{Name: "acme/app", ReadyImage: "ready-9", ReadyOn: machine, Setup: build})
+	id := g.created(domain.KindInteractive)
+	g.pass()
+	c := calls(g.boxes, "Converge")
+	if len(c) != 1 || c[0].Target.Task != id || c[0].Target.Machine != "m2" || c[0].Plan.Image != build.Image || c[0].Plan.Inner != build.Inner {
+		t.Fatalf("converges %+v", c)
+	}
+}
+
 func TestPlacementRespectsCapacityMachinesAndOwners(t *testing.T) {
 	store := newStore()
 	capacity := domain.Capacity{Max: 1}

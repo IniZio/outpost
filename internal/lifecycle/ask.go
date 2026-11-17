@@ -135,8 +135,9 @@ func (r *Runner) plan(ctx context.Context, t domain.Task, run domain.AgentRun, g
 		env = map[string]string{}
 	}
 	maps.Copy(env, launch.Env)
+	build, _ := repo.SetupOn(t.Kind, t.Machine)
 	return ports.Plan{
-		Target: tg, Image: repo.ReadyFor(t.Kind, r.cfg.BaseImage, t.Machine), Fresh: fresh,
+		Target: tg, Image: repo.ReadyFor(t.Kind, r.cfg.BaseImage, t.Machine), Inner: build.Inner, Fresh: fresh,
 		Repos: repos, Env: env, CA: creds.CA, Launch: launch,
 	}, nil
 }
