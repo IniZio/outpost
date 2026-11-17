@@ -109,7 +109,7 @@ func (w *world) chain(t *testing.T, needCA bool) portstest.BoxesRig {
 		clone = trusted + " && " + clone
 	}
 	c := newChain(t, w.sb, func(cfg *machine.Config) {
-		cfg.Clone = func(_ domain.RepoName, dir string) []string {
+		cfg.Clone = func(_ domain.RepoName, dir, _ string) []string {
 			w.clones.Add(1)
 			return []string{"sh", "-c", clone, dir}
 		}

@@ -41,6 +41,7 @@ type HomeFile struct {
 type ConvergeReq struct {
 	Box    BoxRef            `json:"box"`
 	Image  string            `json:"image"`
+	Inner  string            `json:"inner,omitempty"`
 	Fresh  bool              `json:"fresh"`
 	Repos  []domain.RepoName `json:"repos"`
 	Env    map[string]string `json:"env"`
@@ -75,6 +76,9 @@ func (r ConvergeReq) Validate() error {
 		}
 	}
 	if err := validEnv(r.Env); err != nil {
+		return err
+	}
+	if err := ValidInner(r.Inner); err != nil {
 		return err
 	}
 	if slices.ContainsFunc(r.Setup, func(argv []string) bool { return len(argv) == 0 }) {

@@ -65,9 +65,12 @@ func (s *Sandbox) dropOlder(key ports.BoxKey) {
 func (s *Sandbox) start(spec ports.BoxSpec) (*Box, bool) {
 	b := s.boxes[spec.Key]
 	if b == nil {
-		b = &Box{Info: ports.BoxInfo{Key: spec.Key, Repo: spec.Repo}, Image: spec.Image, Env: maps.Clone(spec.Env), disk: map[string]string{}}
+		b = &Box{Info: ports.BoxInfo{Key: spec.Key, Repo: spec.Repo}, Image: spec.Image, Env: maps.Clone(spec.Env), Spec: spec, disk: map[string]string{}}
 		if s.seeded[spec.Image] {
 			b.disk["/var/lib/outpost-seed/workspace"] = ""
+		}
+		for _, p := range s.imaged[spec.Image] {
+			b.disk[p] = ""
 		}
 		s.boxes[spec.Key] = b
 	}

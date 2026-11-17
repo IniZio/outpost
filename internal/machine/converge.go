@@ -52,7 +52,9 @@ var steps = []step{
 	{"", (*convergeRun).seedHome},
 	{"", (*convergeRun).trust},
 	{"", (*convergeRun).profile},
+	{"", (*convergeRun).images},
 	{"", (*convergeRun).clone},
+	{"", (*convergeRun).afterClone},
 	{"Starting the agent", (*convergeRun).agent},
 }
 
@@ -77,7 +79,10 @@ func (c *convergeRun) close() {
 }
 
 func (c *convergeRun) up(ctx context.Context) error {
-	spec := ports.BoxSpec{Key: c.key, Image: c.req.Image, Repo: c.req.Repos[0], Fresh: c.req.Fresh, Env: boxEnv}
+	spec := ports.BoxSpec{
+		Key: c.key, Image: c.req.Image, Repo: c.req.Repos[0], Repos: c.req.Repos, Inner: c.req.Inner,
+		Fresh: c.req.Fresh, Env: boxEnv,
+	}
 	if _, err := c.m.cfg.Sandbox.Up(ctx, spec, c.j.add); err != nil {
 		return fmt.Errorf("machine: preparing the box: %w", err)
 	}
@@ -241,7 +246,13 @@ func (c *convergeRun) cloneOne(ctx context.Context, repo domain.RepoName) error 
 	if err := c.run(ctx, nil, "rm", "-rf", partial); err != nil {
 		return err
 	}
-	if err := c.run(ctx, c.req.Env, c.m.cfg.Clone(repo, partial)...); err != nil {
+	ref := domain.MirrorDir(repo)
+	if ok, err := c.exists(ctx, ref); err != nil {
+		return err
+	} else if !ok {
+		ref = ""
+	}
+	if err := c.run(ctx, c.req.Env, c.m.cfg.Clone(repo, partial, ref)...); err != nil {
 		return err
 	}
 	return c.run(ctx, nil, "mv", partial, dir)

@@ -32,6 +32,7 @@ func TestConvergeValidateRefusesWhatCouldEscape(t *testing.T) {
 		"absolute home":  func(r *ops.ConvergeReq) { r.Home = []ops.HomeFile{{Path: "/etc/passwd"}} },
 		"escaping home":  func(r *ops.ConvergeReq) { r.Home = []ops.HomeFile{{Path: "a/../../x"}} },
 		"oversized home": func(r *ops.ConvergeReq) { r.Home = []ops.HomeFile{{Path: "a", Data: make([]byte, ops.HomeBudget+1)}} },
+		"path as inner":  func(r *ops.ConvergeReq) { r.Inner = "../../etc" },
 	}
 	for name, mut := range bad {
 		r := goodConverge()

@@ -26,6 +26,7 @@ func (m *Machine) Register(r *link.Registry) {
 		return ops.StatusResp{Build: m.cfg.Build, Role: domain.RoleSandbox}, nil
 	})
 	link.HandleStream(r, ops.BoxConverge, m.serveConverge)
+	link.HandleStream(r, ops.SetupBuild, m.serveSetupBuild)
 	link.HandleResumable(r, ops.BoxWatch, m.feed.serve)
 	link.Handle(r, ops.BoxType, func(ctx context.Context, _ link.Meta, q ops.TypeReq) (struct{}, error) {
 		return struct{}{}, m.onRun(ctx, q.Box, func(c *hc.Conn, addr string) error { return c.Send(ctx, addr, q.Text) })

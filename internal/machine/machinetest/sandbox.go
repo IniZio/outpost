@@ -27,6 +27,7 @@ type Box struct {
 	Info  ports.BoxInfo
 	Image string
 	Env   map[string]string
+	Spec  ports.BoxSpec // as the box was created
 	Core  *hctest.Core
 	disk  map[string]string
 }
@@ -37,6 +38,7 @@ type Sandbox struct {
 	boxes   map[ports.BoxKey]*Box
 	volumes map[domain.TaskID]map[string]string
 	seeded  map[string]bool
+	imaged  map[string][]string
 	calls   []string
 	sinks   map[int]func(ports.BoxChange)
 	nsink   int
@@ -51,7 +53,7 @@ type Sandbox struct {
 func New() *Sandbox {
 	return &Sandbox{
 		boxes: map[ports.BoxKey]*Box{}, volumes: map[domain.TaskID]map[string]string{}, seeded: map[string]bool{},
-		sinks: map[int]func(ports.BoxChange){}, holds: map[string]chan struct{}{}, fails: map[string]string{},
+		imaged: map[string][]string{}, sinks: map[int]func(ports.BoxChange){}, holds: map[string]chan struct{}{}, fails: map[string]string{},
 		entered: make(chan string, 64),
 	}
 }
@@ -65,6 +67,14 @@ func onVolume(p string) bool {
 		}
 	}
 	return false
+}
+
+// ImageFile makes boxes of image start with an empty file at p, as a setup build's image or a
+// machine mirror mount gives them.
+func (s *Sandbox) ImageFile(image, p string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.imaged[image] = append(s.imaged[image], p)
 }
 
 // Seeded makes boxes of image carry a template's seed directory, as a saved template does.

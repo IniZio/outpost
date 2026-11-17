@@ -44,7 +44,10 @@ type Config struct {
 	Sandbox ports.Sandbox
 	Clock   domain.Clock
 	// Clone is the argv that clones repo into dir inside the box. It runs with the plan's env.
-	Clone func(repo domain.RepoName, dir string) []string
+	// ref is the repo's machine mirror in the box to borrow objects from, or "" for none.
+	Clone func(repo domain.RepoName, dir, ref string) []string
+	// Builder builds setup revisions. Nil refuses setup.build.
+	Builder ports.SetupBuilder
 	// FollowWait bounds how long a start waits for a caller before it launches the agent.
 	FollowWait time.Duration
 	// Redial is the pause between attempts to follow a box's hc.
@@ -53,17 +56,23 @@ type Config struct {
 	Build string
 }
 
-// GHClone clones with the GitHub CLI, which the proxy's placeholders authenticate.
-func GHClone(repo domain.RepoName, dir string) []string {
+// GHClone clones with the GitHub CLI, which the proxy's placeholders authenticate. With a mirror
+// it borrows the mirror's objects, so only what is newer crosses the network; the mirror is never
+// pruned, so the borrowed objects stay. Without one it fetches blobs on demand.
+func GHClone(repo domain.RepoName, dir, ref string) []string {
+	if ref != "" {
+		return []string{"gh", "repo", "clone", string(repo), dir, "--", "--reference", ref}
+	}
 	return []string{"gh", "repo", "clone", string(repo), dir, "--", "--filter=blob:none"}
 }
 
 // Machine serves the box ops.
 type Machine struct {
-	cfg   Config
-	mu    sync.Mutex
-	slots map[domain.TaskID]*slot
-	feed  *feed
+	cfg    Config
+	mu     sync.Mutex
+	slots  map[domain.TaskID]*slot
+	feed   *feed
+	builds builds
 }
 
 // New returns a machine. Run must be running for box.watch to see anything.
@@ -84,6 +93,7 @@ func New(cfg Config) (*Machine, error) {
 		cfg.Redial = time.Second
 	}
 	m := &Machine{cfg: cfg, slots: map[domain.TaskID]*slot{}}
+	m.builds = builds{turn: make(chan struct{}, 1), jobs: map[string]*job{}}
 	m.feed = newFeed(m)
 	return m, nil
 }

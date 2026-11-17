@@ -89,7 +89,7 @@ func TestDockerEndToEnd(t *testing.T) {
 	ana := l.client("ana")
 	id, key := pairAgent(ctx, t, l, ana)
 	startAgent(t, l, id, key, w.sandbox(t), func(c *machine.Config) {
-		c.Clone = func(_ domain.RepoName, dir string) []string {
+		c.Clone = func(_ domain.RepoName, dir, _ string) []string {
 			return []string{"git", "clone", "-q", "/srv/main.git", dir}
 		}
 	})

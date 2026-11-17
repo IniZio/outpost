@@ -56,6 +56,9 @@ func stubBoxOps(r *link.Registry) {
 	link.HandleResumable(r, ops.BoxWatch, func(context.Context, link.Meta, struct{}) (struct{}, link.Bytes, error) {
 		return struct{}{}, nil, refuse
 	})
+	link.HandleStream(r, ops.SetupBuild, func(context.Context, link.Meta, ops.SetupBuildReq) (struct{}, link.Bytes, error) {
+		return struct{}{}, nil, refuse
+	})
 }
 
 func serverRegistry(lines chan<- ops.ReportLine) *link.Registry {
