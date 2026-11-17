@@ -128,19 +128,7 @@ func readBuild(st link.Stream) ([]string, ops.SetupBuilt, error) {
 func TestASetupBuildIsJoinedByARepeatCall(t *testing.T) {
 	b := &builder{let: make(chan struct{})}
 	r := newRig(t, func(c *machine.Config) { c.Builder = b })
-	streams := make([]link.Stream, 2)
-	for i := range streams {
-		_, st, err := link.Open(r.ctx(), r.link, ops.SetupBuild, buildReq(2))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = st.Close() })
-		sc := bufio.NewScanner(st)
-		if !sc.Scan() {
-			t.Fatal("no first phase")
-		}
-		streams[i] = st
-	}
+	streams := []link.Stream{r.joined(), r.joined()}
 	close(b.let)
 	for _, st := range streams {
 		if _, got, err := readBuild(st); err != nil || got.Image != "obd-setup/o--main:r2" {
@@ -150,6 +138,21 @@ func TestASetupBuildIsJoinedByARepeatCall(t *testing.T) {
 	if len(b.specs) != 1 || !slices.Equal(b.specs[0].Keep, []int{1}) || b.specs[0].Base != "ob-base:1" {
 		t.Fatalf("one build with the request's spec: %+v", b.specs)
 	}
+}
+
+// joined opens a build of revision 2 and returns once its first phase arrives, so the build is in
+// flight.
+func (r *rig) joined() link.Stream {
+	r.t.Helper()
+	_, st, err := link.Open(r.ctx(), r.link, ops.SetupBuild, buildReq(2))
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	r.t.Cleanup(func() { _ = st.Close() })
+	if !bufio.NewScanner(st).Scan() {
+		r.t.Fatal("no first phase")
+	}
+	return st
 }
 
 func TestASetupBuildFailureReachesTheCaller(t *testing.T) {
